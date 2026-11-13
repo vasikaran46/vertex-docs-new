@@ -1,0 +1,34 @@
+# Node
+node_modules/
+dist/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+# Uploaded documents and user files
+backend/storage/*
+!backend/storage/.gitkeep
+
+# Generated validation files
+frontend/.tsupgrader/
+
+# Backup files
+
+# Local backup files
+frontend/src/App.backup.txt

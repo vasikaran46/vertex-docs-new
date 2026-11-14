@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import Base, engine
 from . import models
 from .routers import auth, settings, documents, pdf, ai, templates
+from .chatbot.routes import router as chatbot_router
 
 
 # Create database tables
@@ -61,7 +62,8 @@ for router in (
     documents.router,  
     pdf.router,
     ai.router,
-    templates.router
+    templates.router,
+    chatbot_router,
 ):
     app.include_router(router)
 

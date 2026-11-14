@@ -7,6 +7,9 @@ import {
   Mic, Volume2, BookOpen, MessageCircle, ArrowDownToLine, RefreshCw, UserRound,
 } from 'lucide-react';
 import { companions, conversionTools, groups, languages, palettes, tools, type ConversionTool } from './catalogue';
+import { VertexAssistant } from './features/assistant/VertexAssistant';
+import { AiDocChat } from './features/ai-intelligence/AiDocChat';
+import './sidebar-hover.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -1074,8 +1077,8 @@ export default function App() {
     }
   }
 
-  async function sendAiDocumentChat() {
-    const message = aiDocChatInput.trim();
+  async function sendAiDocumentChat(customPrompt?: string) {
+    const message = (customPrompt || aiDocChatInput).trim();
     if (!message || !selectedAiDoc || !token || aiDocChatBusy) return;
     const history = aiDocMessages.slice(-12).map((item) => ({ role: item.role, content: item.text }));
     setAiDocChatInput('');
@@ -2431,18 +2434,22 @@ export default function App() {
                 <button className="primary ai-action-button" disabled={!token||aiDocSummaryBusy} onClick={() => void summarizeAiDocument()}>{aiDocSummaryBusy?<RefreshCw className="spin" size={16}/>:<Sparkles size={16}/>} {aiDocSummaryBusy?'Reading your document…':'Summarize document'}</button>
                 {aiDocSummary && <section className="ai-response-card"><div className="ai-response-heading"><span className="ai-response-avatar">{companion.emoji}</span><span><b>{companion.name}’s summary</b><small>{selectedLabel}</small></span><button aria-label="Read summary aloud" onClick={() => speakText(aiDocSummary)}><Volume2 size={16}/><span>Listen</span></button></div><p>{aiDocSummary}</p></section>}
               </div>
-                : aiDocMode==='chat' ? <div className="ai-chat-workspace">
-                  <div className="ai-feature-intro"><span className="ai-feature-icon"><MessageCircle size={20}/></span><div><h2>Ask questions about your file</h2><p>Your answers are grounded in <b>{selectedLabel}</b> and reply in the selected assistant language.</p></div></div>
-                  <div className="ai-chat-transcript" role="log" aria-live="polite">
-                    {!aiDocMessages.length && <div className="ai-chat-welcome"><span>{companion.emoji}</span><div><b>Hi, I’m {companion.name}!</b><p>Ask me to explain a section, find a date, or clarify an idea from this document.</p></div></div>}
-                    {aiDocMessages.map((message,index)=><div className={`ai-chat-line ${message.role}`} key={`${message.role}-${index}`}><span className="ai-chat-avatar">{message.role==='assistant'?companion.emoji:'You'}</span><div className="ai-chat-bubble"><p>{message.text}</p>{message.role==='assistant'&&<button aria-label="Read assistant reply aloud" onClick={() => speakText(message.text)}><Volume2 size={14}/> Listen</button>}</div></div>)}
-                    {aiDocChatBusy&&<div className="ai-chat-line assistant"><span className="ai-chat-avatar">{companion.emoji}</span><div className="ai-chat-bubble typing-indicator">Thinking it through…</div></div>}
+                : aiDocMode==='chat' ? (
+                  <div className="ai-chat-workspace">
+                    <AiDocChat
+                      selectedLabel={selectedLabel}
+                      companion={companion}
+                      messages={aiDocMessages}
+                      busy={aiDocChatBusy}
+                      input={aiDocChatInput}
+                      onInputChange={setAiDocChatInput}
+                      onSend={(overridePrompt) => void sendAiDocumentChat(overridePrompt)}
+                      isListening={isListening}
+                      startVoiceInput={startVoiceInput}
+                      speakText={speakText}
+                    />
                   </div>
-                  <div className="ai-chat-compose"><textarea value={aiDocChatInput} onChange={(event)=>setAiDocChatInput(event.target.value)} onKeyDown={(event)=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();void sendAiDocumentChat();}}} placeholder={`Ask ${selectedLabel} a question…`} aria-label="Message about the selected document" />
-                    <button className={isListening?'voice-active':''} aria-label={isListening?'Stop voice input':'Speak your question'} aria-pressed={isListening} onClick={()=>startVoiceInput((text)=>setAiDocChatInput((current)=>[current,text].filter(Boolean).join(' ')))}><Mic size={17}/></button>
-                    <button className="primary" aria-label="Send question" disabled={!aiDocChatInput.trim()||aiDocChatBusy} onClick={()=>void sendAiDocumentChat()}><Send size={17}/></button>
-                  </div>
-                </div>
+                )
                   : <div className="ai-translate-workspace">
                     <div className="ai-feature-intro"><span className="ai-feature-icon"><Languages size={20}/></span><div><h2>Translate the whole document</h2><p>Keep the original untouched and get a translated text file you can download.</p></div></div>
                     <div className="translation-language-row ai-translation-language-row">
@@ -3262,49 +3269,20 @@ export default function App() {
       )}
       {page !== 'AI Documents' && <button className="assistant-fab" aria-label="Open Vertex Assistant" onClick={() => setChatOpen((open) => !open)}><span>{companion.emoji}</span><small>AI</small></button>}
       {page !== 'AI Documents' && chatOpen && (
-        <section className="assistant-panel">
-          <header className="assistant-header">
-            <span className="assistant-star"><Sparkles size={17} /></span>
-            <span><b>Vertex Assistant</b><small>{chatConversations.find((item) => item.id === activeChatId)?.title || 'Private chat'} · {companion.name}</small></span>
-            <button className="assistant-new-chat" disabled={!token || chatHistoryBusy} onClick={() => void createChatConversation().catch((error: unknown) => setNotice(error instanceof Error ? error.message : 'Could not start a new chat.'))}><FilePlus2 size={15} /> New chat</button>
-            <button className="icon-button" aria-label="Close assistant" onClick={() => setChatOpen(false)}><X size={18} /></button>
-          </header>
-          <div className="assistant-workspace">
-            <aside className="assistant-history">
-              <b>Chat history</b>
-              {chatHistoryBusy && <small>Loading chats…</small>}
-              {!chatHistoryBusy && !chatConversations.length && <small>Your chats will appear here.</small>}
-              {chatConversations.map((conversation) => <div className={`assistant-history-item ${activeChatId === conversation.id ? 'active' : ''}`} key={conversation.id}>
-                <button title={conversation.title} onClick={() => void selectChatConversation(conversation.id)}>{conversation.title}</button>
-                <button aria-label={`Delete ${conversation.title}`} title="Delete chat" onClick={() => void deleteChatConversation(conversation.id)}><Trash2 size={13} /></button>
-              </div>)}
-              {!token && <small>Sign in to keep private chat history.</small>}
-            </aside>
-            <div className="assistant-chat-main">
-              <div className="assistant-messages">
-                {!chatMessages.length && <div className="assistant-welcome"><b>{companion.emoji} {companion.name}</b><p>Hello! Ask a question, attach a document or image, or convert a supported file.</p><button className="chat-speak-button" onClick={() => speakText('Hello! I am your Vertex assistant. Ask a question, attach a document or image, or convert a supported file.')}><Volume2 size={14}/> Listen</button>{!token && <small>Sign in to chat. Add an LLM_API_KEY to backend/.env to enable AI replies.</small>}</div>}
-                {chatMessages.map((message, index) => <div className={`chat-message-row ${message.role}`} key={`${message.role}-${index}`}><p className={`chat-message ${message.role}`}>{message.text}</p>{message.role==='assistant'&&<button className="chat-speak-button" aria-label="Read response aloud" onClick={() => speakText(message.text)}><Volume2 size={14}/></button>}</div>)}
-                {chatBusy && <p className="chat-message assistant">Thinking…</p>}
-                {voiceFeedback&&<small className="voice-feedback">{voiceFeedback}</small>}
-              </div>
-              {chatConversionOutput && <div className="assistant-conversion-result"><FileText size={16} /><span><b>{chatConversionOutput.file.name}</b><small>Conversion complete</small></span><a href={chatConversionOutput.url} download={chatConversionOutput.file.name}><Download size={15} /> Download</a></div>}
-            </div>
-          </div>
-          <div className="assistant-attachment-row">
-            <button onClick={() => chatAttachmentInputRef.current?.click()}><UploadCloud size={14} /> Attach file or image</button>
-            <input ref={chatAttachmentInputRef} type="file" accept=".pdf,.docx,.txt,.md,image/png,image/jpeg,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0] ?? null; setChatAttachmentError(file && file.size > 50 * 1024 * 1024 ? 'Files must be 50 MB or smaller.' : ''); setChatAttachment(file && file.size <= 50 * 1024 * 1024 ? file : null); event.target.value = ''; }} />
-            {chatAttachment && <span className="assistant-attachment-chip" title={chatAttachment.name}>{chatAttachment.name}<button aria-label="Remove attachment" onClick={() => setChatAttachment(null)}><X size={12} /></button></span>}
-            <select aria-label="Convert attached file to" value={chatConversionFormat} onChange={(event) => setChatConversionFormat(event.target.value as ExportFormat)}><option value="pdf">Convert to PDF</option><option value="docx">Convert to DOCX</option><option value="txt">Convert to TXT</option></select>
-            <button disabled={!chatAttachment || chatConversionBusy || !token} onClick={() => void convertChatAttachment()}>{chatConversionBusy ? 'Converting…' : 'Convert'}</button>
-            {chatAttachmentError && <small role="alert">{chatAttachmentError}</small>}
-          </div>
-          <div className="assistant-compose">
-            <label className="language-select"><Languages size={15} /><select value={language} onChange={(event) => void savePreferences({ language: event.target.value })} aria-label="Assistant language">{languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-            <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendChat(); } }} placeholder="Message Vertex Assistant…" aria-label="Message Vertex Assistant" />
-            <button className={`voice-button ${isListening?'voice-active':''}`} aria-label={isListening?'Stop voice input':'Speak your message'} aria-pressed={isListening} onClick={() => startVoiceInput((text) => setChatInput((current) => [current,text].filter(Boolean).join(' ')))}><Mic size={16}/></button>
-            <button className="send-button" aria-label="Send message" disabled={chatBusy || (!chatInput.trim() && !chatAttachment) || !token} onClick={() => void sendChat()}><Send size={17} /></button>
-          </div>
-        </section>
+        <VertexAssistant
+          api={API}
+          token={token}
+          companion={companion}
+          language={language}
+          languages={languages}
+          onLanguageChange={(lang) => void savePreferences({ language: lang })}
+          onClose={() => setChatOpen(false)}
+          speakText={speakText}
+          isListening={isListening}
+          startVoiceInput={startVoiceInput}
+          voiceFeedback={voiceFeedback}
+          setNotice={setNotice}
+        />
       )}
     </div>
   );

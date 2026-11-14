@@ -1,0 +1,111 @@
+/* ==========================================================================
+   SIDEBAR HOVER & INTERACTION EFFECTS
+   Scoped to .sidebar only. Adds transitions and hover micro-interactions.
+   Does NOT change: text, icons, colors at rest, sizes, spacing, layout,
+   order, active styling, or any element outside the sidebar.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Nav items (main nav + .sidebar-bottom nav)
+   -------------------------------------------------------------------------- */
+
+/* Smooth transition on all nav buttons */
+.sidebar nav button {
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+/* Icon transition */
+.sidebar nav button svg {
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+/* Hover: subtle lift + icon nudge */
+.sidebar nav button:hover {
+  transform: translateX(2px);
+}
+
+.sidebar nav button:hover svg {
+  color: var(--accent-strong);
+  transform: scale(1.1);
+}
+
+/* Active press: brief scale-down for click feel */
+.sidebar nav button:active:not(.active) {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+
+/* --------------------------------------------------------------------------
+   2. "Need a hand?" assistant launcher card (.sidebar-assistant)
+   Enhances chatbot.css transitions — adds glow ring and button press.
+   -------------------------------------------------------------------------- */
+
+.sidebar-assistant {
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s ease,
+    outline-color 0.22s ease;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.sidebar-assistant:hover {
+  outline-color: rgba(255, 255, 255, 0.15);
+}
+
+/* "Open assistant" button — press feedback */
+.sidebar-assistant button:active {
+  transform: translateY(0px) scale(0.96);
+  transition-duration: 0.06s;
+}
+
+/* --------------------------------------------------------------------------
+   3. Sidebar-bottom links (Account / Privacy, Companion & Themes)
+   Re-uses the same nav button selectors; effects inherited from §1 above.
+   -------------------------------------------------------------------------- */
+
+/* (Covered by .sidebar nav button rules — no extra CSS needed.) */
+
+/* --------------------------------------------------------------------------
+   4. Brand / logo header block (topbar) — very light hover only
+   -------------------------------------------------------------------------- */
+
+.brand {
+  transition: opacity 0.18s ease;
+}
+
+.brand:hover {
+  opacity: 0.8;
+}
+
+/* Hamburger menu button — very light hover */
+.menu-button {
+  transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.menu-button:hover {
+  color: var(--accent-strong);
+  background: var(--surface-soft);
+}
+
+/* --------------------------------------------------------------------------
+   5. Responsive: disable transforms on small screens (single-row nav)
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 740px) {
+  .sidebar nav button:hover {
+    transform: none;
+  }
+
+  .sidebar nav button:active:not(.active) {
+    transform: none;
+  }
+
+  .sidebar nav button:hover svg {
+    transform: none;
+  }
+}

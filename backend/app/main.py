@@ -1,4 +1,3 @@
-
 import os
 from dotenv import load_dotenv
 
@@ -11,23 +10,30 @@ from .database import Base, engine
 from . import models
 from .routers import auth, settings, documents, pdf, ai, templates
 
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+
+# Initialize FastAPI
 app = FastAPI(
     title="Vertex Docs API",
     version="1.0.0"
 )
 
+
 # Allow frontend development origins
 allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "http://localhost:5175",
     "http://127.0.0.1:5175",
 ]
 
-# Include any additional origins configured in .env
+
+# Include additional origins configured in .env
 env_origins = os.getenv("CORS_ORIGINS", "")
 
 if env_origins:
@@ -37,6 +43,8 @@ if env_origins:
         if origin.strip()
     )
 
+
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(set(allowed_origins)),
@@ -45,11 +53,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Register API routers
 for router in (
     auth.router,
     settings.router,
-    documents.router,
+    documents.router,  
     pdf.router,
     ai.router,
     templates.router
@@ -63,3 +72,4 @@ def health():
         "status": "ok",
         "service": "Vertex Docs API"
     }
+    

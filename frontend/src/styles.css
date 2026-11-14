@@ -930,7 +930,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .send-button { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; color: white; background: var(--accent); border-color: var(--accent); }
 .send-button:disabled { opacity: .5; }
 
-.sidebar-collapsed .app-body { grid-template-columns: 0 minmax(0, 1fr); }
+.sidebar-collapsed .app-body { grid-template-columns: minmax(0, 1fr); }
 .sidebar-collapsed .sidebar { display: none; }
 
 @media (max-width: 1000px) {

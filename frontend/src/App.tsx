@@ -670,12 +670,6 @@ export default function App() {
       });
       if (!response.ok) throw new Error(await responseError(response));
       const result = await response.json();
-      if (authMode === 'signup') {
-        setAuthMode('login');
-        setPassword('');
-        setNotice('Account created. Sign in to sync your documents and settings.');
-        return;
-      }
       localStorage.setItem('vd-token', result.access_token);
       setToken(result.access_token);
       setPassword('');
@@ -684,7 +678,7 @@ export default function App() {
       setAvatar(companionFrom(result.user.avatar).id);
       setLanguage(result.user.language || 'en');
       setPage('Home / Workspace');
-      setNotice('You are signed in.');
+      setNotice(authMode === 'signup' ? 'Account created. You are signed in.' : 'You are signed in.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not sign in.');
     }
@@ -709,8 +703,12 @@ export default function App() {
     setActiveChatId(null);
     setChatAttachment(null);
     setChatConversionOutput(null);
+    setName('');
+    setEmail('');
+    setPassword('');
+    setAuthMode('login');
     localStorage.removeItem('vd-token');
-    setNotice('You have signed out.');
+    setNotice('You have signed out. The next person can sign in with their own account.');
   }
 
   async function uploadDocument(file?: File) {

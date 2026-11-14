@@ -10,6 +10,10 @@ class LoginIn(BaseModel):
 class UserOut(BaseModel):
     id:int; name:str; email:str; theme:str; language:str; avatar:str
     class Config: from_attributes=True
+class AuthOut(BaseModel):
+    access_token:str
+    token_type:Literal["bearer"]="bearer"
+    user:UserOut
 class PreferencesIn(BaseModel):
     theme:Literal[
         "forest-light","forest-dark","rose-light","rose-dark","graphite-light","graphite-dark",

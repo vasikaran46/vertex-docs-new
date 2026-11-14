@@ -1,7 +1,7 @@
 # Feature status
 
 ## Connected to the backend
-- Account signup, login, current-user lookup, and sign-out. Accounts persist across sign-in sessions; document endpoints scope access to the authenticated owner.
+- Account signup, login, current-user lookup, and sign-out. Signup starts an authenticated session immediately, the same credentials work after sign-out, and every account keeps its own private documents. The local SQLite database lives in `backend/` regardless of the launch folder.
 - Per-user document upload, listing, download, and deletion.
 - Persisted language, six color palettes with Light/Dark modes, and companion selection.
 - PDF information, merge, split, rotate, remove/extract pages, organize pages (reorder/rotate/remove), scan photos to a multi-page PDF, password protect/unlock, text extraction, and content-stream compression.

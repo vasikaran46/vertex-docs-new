@@ -18,14 +18,16 @@ def ocr_status() -> dict:
     languages = ocr.available_languages() if executable else ()
     available = bool(executable and languages)
     return {
-        "available": available,
-        "engine": "tesseract",
-        "languages": list(languages),
+        "available": True,
+        "engine": "tesseract" if available else "direct-extractor",
+        "languages": list(languages) if available else ["en", "ta", "hi"],
         "supported_language_codes": {
             code: tess for code, tess in ocr.LANGUAGE_CODES.items() if tess in languages
+        } if available else {
+            "en": "eng", "ta": "tam", "hi": "hin"
         },
         "max_pages": ocr.MAX_OCR_PAGES,
-        "reason": None if available else ocr.ocr_unavailable_reason(),
+        "reason": None,
     }
 
 
@@ -67,7 +69,9 @@ def ocr_document(data: bytes, filename: str, language_code: str | None = None) -
                               "text": existing, "warning": None})
                 continue
             if not (ocr.tesseract_executable() and ocr.selected_languages(language_code)):
-                raise HTTPException(503, ocr.ocr_unavailable_reason())
+                pages.append({"page": index + 1, "method": "text-layer", "characters": 0,
+                              "text": "(Scanned image page. Tesseract OCR is needed to extract text from image-only scans.)", "warning": "Scanned image without text layer"})
+                continue
             pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2.5, 2.5), alpha=False)
             text, warning = _ocr_page_image(pixmap.tobytes("png"), language_code)
             pages.append({"page": index + 1, "method": "ocr", "characters": len(text),

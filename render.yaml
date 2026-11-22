@@ -1,40 +1,33 @@
+# Render blueprint. Secrets are marked sync:false so you enter them in the dashboard (never commit them).
 services:
   - type: web
     name: vertex-docs-api
     runtime: python
-    region: singapore
-    plan: free
+    rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /docs
     envVars:
-      - key: VERTEX_IGNORE_ENV_FILE
-        value: "1"
-      - key: DATABASE_URL
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_PUBLISHABLE_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true
-      - key: CORS_ORIGINS
-        sync: false
-      - key: LLM_API_KEY
-        value: "ollama"
-      - key: LLM_BASE_URL
-        sync: false
-      - key: LLM_MODEL
-        value: "llama3.2:latest"
-      - key: OLLAMA_BASE_URL
-        sync: false
-      - key: OLLAMA_MODEL
-        value: "llama3.2"
-      - key: PUBLIC_APP_URL
-        sync: false
-      - key: PUBLIC_API_URL
-        sync: false
-      - key: PYTHON_VERSION
-        value: "3.13.5"
-    rootDir: backend
+      - { key: PYTHON_VERSION, value: 3.12.3 }
+      - { key: SECRET_KEY, generateValue: true }
+      - { key: DATABASE_URL, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_PUBLISHABLE_KEY, sync: false }
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }
+      - { key: CORS_ORIGINS, sync: false }
+      - { key: GOOGLE_TRANSLATE_API_KEY, sync: false }
+      - { key: LLM_BASE_URL, sync: false }
+      - { key: LLM_MODEL, sync: false }
+      - { key: LLM_API_KEY, sync: false }
+  - type: web
+    name: vertex-docs-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - { type: rewrite, source: /*, destination: /index.html }
+    envVars:
+      - { key: VITE_API_URL, sync: false }
+      - { key: VITE_SUPABASE_URL, sync: false }
+      - { key: VITE_SUPABASE_PUBLISHABLE_KEY, sync: false }

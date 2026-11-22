@@ -46,7 +46,10 @@ class TemplatesAndAiTests(ApiTestCase):
             headers=auth,
             json={"message":"When is the launch?","language":"en"},
         )
-        self.assertEqual(chat.status_code,503,chat.text)
+        # With no chat model configured, document chat now answers from the document itself instead of failing.
+        self.assertEqual(chat.status_code,200,chat.text)
+        self.assertEqual(chat.json()["engine"],"extractive")
+        self.assertIn("Launch date",chat.json()["reply"])
         self.client.delete(f"/api/documents/{document_id}",headers=auth)
 
     def test_long_file_translation_uses_parallel_ordered_sections(self):

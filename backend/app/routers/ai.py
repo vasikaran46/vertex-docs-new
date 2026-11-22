@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import base64
 import binascii
 import io
@@ -31,10 +31,13 @@ from ..conversion_service import (
 )
 from ..database import get_db
 from ..activity import record_activity
+from ..doc_retrieval import extractive_answer, relevant_context
 from ..extractive_summary import summarize
+from ..humanizer import clean_model_output, humanize_local, looks_non_english
 from ..models import AssistantConversation, AssistantMessage, Document
 from ..ocr import image_text_with_ocr, pdf_text_with_ocr
 from ..translation_quality import build_system_message, leftover_ratio, needs_retry
+from ..translation_engine import ProviderFailed, translate_with_providers
 from ..schemas import ChatIn, DocumentChatIn, DocumentLanguageIn, DocumentTranslationIn, HumanizeIn, TranslationIn
 from ..security import current_user
 from ..storage_service import read_document
@@ -287,18 +290,43 @@ def extract_text(filename: str, content: bytes) -> str:
     return text
 
 
-def owned_document_text(doc_id: int, db: Session, u) -> str:
-    item = db.query(Document).filter_by(id=doc_id, owner_id=u.id).first()
-    if not item:
-        raise HTTPException(404, "Document not found")
+_TEXT_CACHE: dict[str, str] = {}
+_TEXT_CACHE_LIMIT = 48
+
+
+def _load_document_text(stored_name: str, original_name: str) -> str:
+    """Read + extract a stored file. Stored names are unique and files are immutable, so results can be cached."""
+    cached = _TEXT_CACHE.get(stored_name)
+    if cached is not None:
+        return cached
     try:
-        content = read_document(item.stored_name)
+        content = read_document(stored_name)
     except FileNotFoundError:
         raise HTTPException(404, "Document file is no longer available")
     except Exception:
         logger.exception("Could not read document from storage")
         raise HTTPException(500, "The document could not be opened")
-    return extract_text(item.original_name, content)
+    text = extract_text(original_name, content)
+    if len(_TEXT_CACHE) >= _TEXT_CACHE_LIMIT:
+        _TEXT_CACHE.pop(next(iter(_TEXT_CACHE)))
+    _TEXT_CACHE[stored_name] = text
+    return text
+
+
+def owned_document_text(doc_id: int, db: Session, u) -> str:
+    item = db.query(Document).filter_by(id=doc_id, owner_id=u.id).first()
+    if not item:
+        raise HTTPException(404, "Document not found")
+    return _load_document_text(item.stored_name, item.original_name)
+
+
+async def owned_document_text_async(doc_id: int, db: Session, u) -> str:
+    """Same as owned_document_text but runs the (possibly OCR-heavy) extraction off the event loop."""
+    item = db.query(Document).filter_by(id=doc_id, owner_id=u.id).first()
+    if not item:
+        raise HTTPException(404, "Document not found")
+    stored_name, original_name = item.stored_name, item.original_name
+    return await asyncio.to_thread(_load_document_text, stored_name, original_name)
 
 def env_file_values() -> dict[str, str]:
     """Read backend/.env so edited LLM settings apply without restarting the server."""
@@ -313,11 +341,7 @@ def env_file_values() -> dict[str, str]:
 
 
 def llm_setting(name: str, default: str = "") -> str:
-    # OS environment variable takes priority (essential for cloud platforms like Render)
-    val = os.getenv(name)
-    if val is not None and val.strip():
-        return val.strip()
-    return env_file_values().get(name) or default
+    return env_file_values().get(name) or os.getenv(name, default).strip() or default
 
 
 def provider_error_detail(response: httpx.Response, model: str) -> str:
@@ -349,41 +373,10 @@ def llm_models() -> list[str]:
     return configured or ["gpt-4o-mini"]
 
 
-async def ai_completion(messages: list[dict], max_tokens: int | None = None) -> str:
-    provider = llm_setting("LLM_PROVIDER", "").lower()
+async def ai_completion(messages: list[dict]) -> str:
     key = llm_setting("LLM_API_KEY")
-    is_ollama = provider == "ollama" or not key or key.lower() == "ollama"
-
-    # Use local/tunneled Ollama service (OpenAI-compatible endpoint)
-    if is_ollama:
-        ollama_raw = llm_setting("OLLAMA_BASE_URL") or llm_setting("LLM_BASE_URL", "http://127.0.0.1:11434")
-        ollama_raw = ollama_raw.strip().rstrip("/")
-        if ollama_raw.endswith("/v1"):
-            ollama_base = ollama_raw[:-3].rstrip("/")
-        else:
-            ollama_base = ollama_raw
-        ollama_model = llm_setting("OLLAMA_MODEL") or llm_setting("LLM_MODEL", "llama3.2")
-        try:
-            async with httpx.AsyncClient(timeout=180) as client:
-                response = await client.post(
-                    f"{ollama_base}/v1/chat/completions",
-                    headers={"Authorization": "Bearer ollama"},
-                    json={"model": ollama_model, "messages": messages, "stream": False, **({"max_tokens": max_tokens} if max_tokens is not None else {})},
-                )
-            if response.status_code >= 400:
-                raise HTTPException(502, f"Ollama returned {response.status_code}: {response.text[:250]}")
-            try:
-                content = response.json()["choices"][0]["message"]["content"]
-            except (KeyError, IndexError, TypeError, ValueError) as error:
-                raise HTTPException(502, "Ollama returned an unexpected response.") from error
-            if not isinstance(content, str) or not content.strip():
-                raise HTTPException(502, "Ollama returned an empty response.")
-            return content.strip()
-        except httpx.RequestError as error:
-            raise HTTPException(
-                503,
-                f"AI is not reachable. Ensure Ollama is running and accessible at '{ollama_base}' with model '{ollama_model}'."
-            ) from error
+    if not key:
+        raise HTTPException(503, "Add LLM_API_KEY to backend/.env")
     base = llm_setting("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     models = llm_models()
     last_error: httpx.Response | None = None
@@ -395,7 +388,7 @@ async def ai_completion(messages: list[dict], max_tokens: int | None = None) -> 
                     response = await client.post(
                         base + "/chat/completions",
                         headers={"Authorization": "Bearer " + key},
-                        json={"model": model, "messages": messages, **({"max_tokens": max_tokens} if max_tokens is not None else {})},
+                        json={"model": model, "messages": messages},
                     )
                 except httpx.RequestError as error:
                     last_error = None
@@ -422,6 +415,39 @@ async def ai_completion(messages: list[dict], max_tokens: int | None = None) -> 
 
 
 async def translate_text(x: TranslationIn):
+    """Translate with the dedicated engines first (Google Cloud / IndicTrans2 / Argos), then the LLM."""
+    engine_error = ""
+    try:
+        engine_result = await translate_with_providers(x.text, x.source_language, x.target_language)
+    except ProviderFailed as error:
+        engine_result = None
+        engine_error = str(error)
+    if engine_result is not None:
+        response = {
+            "translation": engine_result.translation,
+            "source_language": x.source_language,
+            "target_language": x.target_language,
+            "provider": engine_result.provider,
+        }
+        if engine_result.warnings:
+            response["warnings"] = engine_result.warnings
+        return response
+    try:
+        result = await _translate_with_llm(x)
+    except HTTPException as error:
+        if error.status_code == 503 and not llm_setting("LLM_API_KEY"):
+            raise HTTPException(
+                503,
+                (engine_error + " " if engine_error else "")
+                + "No translation provider is available. Add GOOGLE_TRANSLATE_API_KEY (recommended) or set "
+                  "TRANSLATION_ALLOW_UNOFFICIAL_GOOGLE=true for local testing in backend/.env.",
+            )
+        raise
+    result["provider"] = "llm"
+    return result
+
+
+async def _translate_with_llm(x: TranslationIn):
     source = LANGUAGE_NAMES.get(x.source_language, "any language")
     target = LANGUAGE_NAMES[x.target_language]
     system_message = build_system_message(source, target, x.target_language)
@@ -924,17 +950,68 @@ async def summarize_document(
     db: Session = Depends(get_db),
     u = Depends(current_user),
 ):
-    text = owned_document_text(doc_id, db, u)
+    text = await owned_document_text_async(doc_id, db, u)
     language_code, used_fallback = summary_language(text, x.language)
     summary = await asyncio.to_thread(summarize, text)
     if not summary.strip():
         raise HTTPException(400, "No readable text was found in the document")
+    if x.language != "en":
+        try:
+            translated = await translate_text(TranslationIn(text=summary, source_language="auto", target_language=x.language))
+            if translated and translated.get("translation"):
+                summary = translated["translation"]
+                language_code = x.language
+                used_fallback = False
+        except Exception:
+            pass
     record_activity(u.id, "assistant.summarize", "document", doc_id, {"language": language_code})
     return {
         "summary": summary,
         "language": language_code,
         "detected_language": None if used_fallback else language_code,
         "fallback_used": used_fallback,
+    }
+
+
+@router.post("/summarize-file")
+async def summarize_uploaded_file(
+    file: UploadFile = File(...),
+    language: str = Form("en"),
+    length: str = Form("medium"),
+    u = Depends(current_user),
+):
+    """Summarize any readable upload (PDF, Word, text, images via OCR...) without saving it first."""
+    if language not in LANGUAGE_NAMES:
+        raise HTTPException(400, "Choose one of the supported languages")
+    if length not in {"short", "medium", "long"}:
+        raise HTTPException(400, "Length must be short, medium or long")
+    limit = int(os.getenv("MAX_UPLOAD_MB", "50")) * 1024 * 1024
+    content = await file.read(limit + 1)
+    if len(content) > limit:
+        raise HTTPException(413, "File too large")
+    text = await asyncio.to_thread(extract_text, file.filename or "", content)
+    language_code, used_fallback = summary_language(text, language)
+    budget = {"short": 600, "medium": None, "long": 3500}[length]
+    summary = await asyncio.to_thread(summarize, text, budget)
+    if not summary.strip():
+        raise HTTPException(400, "No readable text was found in the document")
+
+    # If user selected a specific language (e.g. Tamil) and the summary is in another language, translate the summary
+    if language != "en":
+        try:
+            translated = await translate_text(TranslationIn(text=summary, source_language="auto", target_language=language))
+            if translated and translated.get("translation"):
+                summary = translated["translation"]
+                language_code = language
+        except Exception:
+            pass
+    record_activity(u.id, "assistant.summarize", "document", None, {"language": language_code})
+    return {
+        "summary": summary,
+        "language": language_code,
+        "words": len(text.split()),
+        "summary_words": len(summary.split()),
+        "name": Path(file.filename or "document").name,
     }
 
 
@@ -945,24 +1022,40 @@ async def chat_with_document(
     db: Session = Depends(get_db),
     u = Depends(current_user),
 ):
-    text = owned_document_text(doc_id, db, u)
+    text = await owned_document_text_async(doc_id, db, u)
     language = (
         "Tanglish (spoken Tamil in Latin letters mixed with common English words)"
         if x.language == "tanglish"
         else LANGUAGE_NAMES[x.language]
     )
+    # Only the passages relevant to this question go to the model: smaller prompt = much faster answers.
+    context = await asyncio.to_thread(relevant_context, text, x.message)
     msgs = [
         {
             "role": "system",
-            "content": f"You are Vertex Assistant. Answer the user's questions accurately using the selected document context only. Reply in {language}. Use clean Markdown formatting. If the answer is not in the document, say so instead of guessing.",
+            "content": f"You are Vertex Assistant. Answer the user's questions accurately using the selected document context only. CRITICAL: You must write your ENTIRE reply ONLY in {language}. Do not reply in English unless {language} is English. Every sentence, greeting, explanation, and conclusion must strictly be in {language}. Use clean Markdown formatting and keep answers focused. If the answer is not in the document, say so in {language} instead of guessing.",
         },
-        {"role": "system", "content": "Selected document context:\n" + text},
+        {"role": "system", "content": "Selected document context (most relevant passages):\n" + context},
     ]
-    msgs.extend({"role": turn.role, "content": turn.content} for turn in x.history)
+    msgs.extend({"role": turn.role, "content": turn.content} for turn in x.history[-6:])
     msgs.append({"role": "user", "content": x.message})
-    reply = await ai_completion(msgs)
+    engine = "model"
+    try:
+        reply = await asyncio.wait_for(ai_completion(msgs), timeout=75)
+    except (HTTPException, asyncio.TimeoutError) as error:
+        # The chat model is missing / slow: still answer from the document itself instead of failing.
+        extract = await asyncio.to_thread(extractive_answer, text, x.message)
+        if not extract:
+            if isinstance(error, HTTPException):
+                raise
+            raise HTTPException(504, "The AI model took too long to answer. Please try again.")
+        engine = "extractive"
+        reply = (
+            "_The AI model is not available right now, so here are the most relevant lines from your document:_\n\n"
+            + extract
+        )
     record_activity(u.id, "assistant.document_chat", "document", doc_id, {"language": x.language})
-    return {"reply": reply}
+    return {"reply": reply, "engine": engine}
 
 
 @router.post("/question-generator")
@@ -1023,8 +1116,10 @@ async def translate(x: TranslationIn, u = Depends(current_user)):
     return result
 
 
-@router.post("/humanize")
-async def humanize(x: HumanizeIn, u = Depends(current_user)):
+HUMANIZE_LLM_TIMEOUT = 45
+
+
+def _humanize_prompt(x: HumanizeIn) -> str:
     style_guidance = {
         "simple": "Use clear, simple words and straightforward sentences.",
         "professional": "Use polished, professional wording appropriate for work.",
@@ -1038,21 +1133,63 @@ async def humanize(x: HumanizeIn, u = Depends(current_user)):
         if x.strength == 5
         else f"Use a moderate level of rewriting (strength {x.strength} of 5)."
     )
-    rewritten = await ai_completion([
-        {
-            "role": "system",
-            "content": (
-                "Rewrite the user's text while preserving its original meaning, facts, intent, and language. "
-                f"{style_guidance[x.writing_style]} {strength_guidance} "
-                "Do not invent details or add commentary. Return only the rewritten text."
-            ),
-        },
-        {"role": "user", "content": x.text},
-    ], max_tokens=max(512, min(3000, int(len(x.text.split()) * 2))))
+    return (
+        "Rewrite the user's text so it reads like a thoughtful person wrote it: vary sentence length, remove filler and "
+        "stiff phrasing, keep the original meaning, facts, names, numbers and language. "
+        f"{style_guidance[x.writing_style]} {strength_guidance} "
+        "Do not invent details or add commentary. Return only the rewritten text."
+    )
+
+
+async def _humanize_with_llm(x: HumanizeIn) -> str | None:
+    """Return the model's rewrite, or None when no model is configured / it fails / the output looks wrong."""
+    try:
+        raw = await asyncio.wait_for(
+            ai_completion([{"role": "system", "content": _humanize_prompt(x)}, {"role": "user", "content": x.text}]),
+            timeout=HUMANIZE_LLM_TIMEOUT,
+        )
+    except (HTTPException, asyncio.TimeoutError):
+        return None
+    cleaned = clean_model_output(raw or "")
+    # Reject empty or truncated answers (a rewrite should be roughly as long as the input).
+    if not cleaned or len(cleaned) < 0.35 * len(x.text) or len(cleaned) > 3 * len(x.text) + 200:
+        return None
+    return cleaned
+
+
+@router.post("/humanize")
+async def humanize(x: HumanizeIn, u = Depends(current_user)):
+    notice = ""
+    engine = "model"
+    rewritten = await _humanize_with_llm(x)
+    if rewritten is None:
+        engine = "local"
+        if looks_non_english(x.text):
+            # Round trip through the translation engine: -> English, humanize, -> original language.
+            source = detect_document_language(x.text) or "auto"
+            try:
+                to_english = await translate_text(TranslationIn(text=x.text, source_language=source, target_language="en"))
+                english, _ = humanize_local(to_english["translation"], x.writing_style, x.strength)
+                back = await translate_text(TranslationIn(text=english, source_language="en", target_language=source if source != "auto" else "en"))
+                rewritten = back["translation"]
+                engine = "local+translation"
+                notice = "Rewritten through the translation engine because no chat model answered."
+            except HTTPException:
+                raise HTTPException(
+                    503,
+                    "Humanizing non-English text needs a chat model or a translation engine. "
+                    "Add GOOGLE_TRANSLATE_API_KEY or a working LLM_* provider in backend/.env.",
+                )
+        else:
+            rewritten, edits = humanize_local(x.text, x.writing_style, x.strength)
+            notice = (
+                "Rewritten with the built-in editor (no chat model was available)."
+                if edits else "The text already reads naturally, so only light clean-up was needed."
+            )
     if not rewritten.strip():
-        raise HTTPException(502, "The AI provider returned an empty rewrite.")
-    record_activity(u.id, "assistant.humanize", "assistant")
-    return {"humanized_text": rewritten.strip()}
+        raise HTTPException(502, "The rewrite came back empty. Please try again.")
+    record_activity(u.id, "assistant.humanize", "assistant", metadata={"engine": engine})
+    return {"humanized_text": rewritten.strip(), "engine": engine, "notice": notice}
 
 
 @router.post("/translate-file")
@@ -1077,6 +1214,4 @@ async def translate_file(
     result["original_text"] = text
     result["detected_source_language"] = detect_document_language(text)
     return result
-
-
 

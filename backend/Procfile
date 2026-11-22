@@ -1,2 +1,0 @@
-# Render uses this to start the backend
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT

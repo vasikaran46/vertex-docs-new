@@ -9,13 +9,6 @@ const FONT_FAMILIES = [
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 30, 32, 36, 40, 48, 60, 72];
 
 const CASE_OPTIONS = ['Sentence case', 'lowercase', 'UPPERCASE', 'Capitalize Each Word', 'tOGGLE cASE'];
-const LIST_STYLES = [
-  { label: '1. Number', type: 'decimal' },
-  { label: 'A. Uppercase letters', type: 'upper-alpha' },
-  { label: 'a. Lowercase letters', type: 'lower-alpha' },
-  { label: 'I. Uppercase Roman', type: 'upper-roman' },
-  { label: 'i. Lowercase Roman', type: 'lower-roman' },
-];
 
 export default function BlankPdfEditor({ onClose }: { onClose?: () => void }) {
   const editorRef = useRef<HTMLDivElement>(null);
@@ -28,8 +21,6 @@ export default function BlankPdfEditor({ onClose }: { onClose?: () => void }) {
   const [fontColor, setFontColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#ffffff');
   const [lineSpacing, setLineSpacing] = useState('1.5');
-  const [listStyle, setListStyle] = useState('decimal');
-  const [pageCount, setPageCount] = useState(1);
 
   function saveSelection() {
     const sel = window.getSelection();
@@ -69,9 +60,9 @@ export default function BlankPdfEditor({ onClose }: { onClose?: () => void }) {
       const span = document.createElement('span');
       span.style.fontSize = `${size}px`;
       span.style.fontFamily = fontFamily;
-      span.appendChild(document.createTextNode('\u200B')); // zero-width space carries the next typing style
+      span.appendChild(document.createTextNode('\u200B')); // zero-width space
       range.insertNode(span);
-      range.setStart(span.firstChild as Text, 1);
+      range.setStartAfter(span);
       range.collapse(true);
       sel.removeAllRanges();
       sel.addRange(range);
@@ -118,28 +109,6 @@ export default function BlankPdfEditor({ onClose }: { onClose?: () => void }) {
     if (editorRef.current) {
       editorRef.current.style.lineHeight = value;
     }
-  }
-
-  function applyListStyle(type: string) {
-    setListStyle(type);
-    restoreSelection();
-    document.execCommand('insertOrderedList');
-    const sel = window.getSelection();
-    if (sel && sel.anchorNode) {
-      const el = sel.anchorNode instanceof HTMLElement ? sel.anchorNode : sel.anchorNode.parentElement;
-      const ol = el?.closest('ol');
-      if (ol) {
-        ol.style.listStyleType = type;
-      }
-    }
-    editorRef.current?.focus();
-  }
-
-  function placeCaretAtPoint(e: React.MouseEvent) {
-    if (e.target === editorRef.current || editorRef.current?.contains(e.target as Node)) {
-      return;
-    }
-    editorRef.current?.focus();
   }
 
   function handlePaste(e: React.ClipboardEvent) {
@@ -305,10 +274,7 @@ export default function BlankPdfEditor({ onClose }: { onClose?: () => void }) {
         <div className="blank-toolbar-row">
           {/* Lists */}
           <button title="Bullet list" onClick={() => exec('insertUnorderedList')}>☰ Bullets</button>
-          <button title="Numbered list" onClick={() => applyListStyle('decimal')}>1. Number</button>
-          <select className="blank-select" aria-label="Numbering style" value={listStyle} onFocus={saveSelection} onChange={(e) => applyListStyle(e.target.value)}>
-            {LIST_STYLES.map((item) => <option key={item.type} value={item.type}>{item.label}</option>)}
-          </select>
+          <button title="Numbered list" onClick={() => exec('insertOrderedList')}>1. Number</button>
           <button title="Increase indent" onClick={() => exec('indent')}>⇥ Indent</button>
           <button title="Decrease indent" onClick={() => exec('outdent')}>⇤ Outdent</button>
 
@@ -340,20 +306,19 @@ export default function BlankPdfEditor({ onClose }: { onClose?: () => void }) {
           {/* Undo / Redo */}
           <button title="Undo (Ctrl+Z)" onClick={() => exec('undo')}>↩ Undo</button>
           <button title="Redo (Ctrl+Y)" onClick={() => exec('redo')}>↪ Redo</button>
-          <span className="blank-page-status">A4 · {pageCount} page{pageCount === 1 ? '' : 's'}</span>
         </div>
       </div>
 
       {/* Page canvas */}
       <div className="blank-page-wrap">
-        <div className="blank-paper" onMouseDown={placeCaretAtPoint}>
+        <div className="blank-paper">
           <div
             ref={editorRef}
             className="blank-editable"
             contentEditable
             suppressContentEditableWarning
             spellCheck
-            style={{ lineHeight: lineSpacing }}
+            style={{ fontFamily, fontSize: `${fontSize}px`, lineHeight: lineSpacing }}
             onMouseUp={saveSelection}
             onKeyUp={saveSelection}
             onFocus={saveSelection}

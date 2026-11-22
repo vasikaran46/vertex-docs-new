@@ -51,8 +51,8 @@ export function OcrPanel({ token, onUseText }: Props) {
       <div className="conversion-heading"><div><h2>OCR PDF</h2><p>Read text from scanned PDFs and images, page by page. Pages that already contain text are not re-scanned.</p></div></div>
       {!token && <p className="inline-hint">Sign in to use OCR.</p>}
       {status && !status.available && <p className="ai-error" role="alert">{status.reason}</p>}
-      <label className="upload-drop"><UploadCloud size={22} /><b>{file ? file.name : 'Choose a scanned PDF or image'}</b><small>PDF, PNG, JPG or WebP · up to 50 MB</small>
-        <input type="file" accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setResult(null); setError(''); event.target.value = ''; }} />
+      <label className="file-drop"><UploadCloud size={22} /><b>{file ? file.name : 'Choose a scanned PDF or image'}</b><small>PDF, PNG, JPG or WebP · up to 50 MB</small>
+        <input type="file" style={{ display: 'none' }} accept=".pdf,application/pdf,image/png,image/jpeg,image/webp" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setResult(null); setError(''); event.target.value = ''; }} />
       </label>
       {codes.length > 0 && (
         <label className="vx-field">Document language
@@ -62,7 +62,7 @@ export function OcrPanel({ token, onUseText }: Props) {
           </select>
         </label>
       )}
-      <button className="primary" disabled={!file || !token || busy || (status !== null && !status.available)} onClick={() => void run()}><ScanText size={16} /> {busy ? 'Reading pages…' : 'Run OCR'}</button>
+      <button className="primary" disabled={!file || !token || busy} onClick={() => void run()}><ScanText size={16} /> {busy ? 'Reading pages…' : 'Run OCR'}</button>
       {error && <p className="ai-error" role="alert">{error}</p>}
       {result && <>
         <p className="operation-notice" role="status">

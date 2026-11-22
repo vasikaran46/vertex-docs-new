@@ -3,8 +3,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
-if not os.getenv("VERTEX_IGNORE_ENV_FILE") and ENV_FILE.exists():
-    load_dotenv(dotenv_path=ENV_FILE, override=False)
+if not os.getenv("VERTEX_IGNORE_ENV_FILE"):
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
 
 print("Vertex Docs .env path:", ENV_FILE)
 print("Vertex Docs LLM API key loaded:", bool(os.getenv("LLM_API_KEY", "").strip()))
@@ -60,7 +60,6 @@ if env_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(set(allowed_origins)),
-    allow_origin_regex=r"^https://.*(\.trycloudflare\.com|\.vercel\.app)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

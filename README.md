@@ -6,7 +6,7 @@ React + TypeScript + Vite frontend; FastAPI backend.
 - Persistent signup/login, JWT-protected API, profile preferences, and owner-scoped document access. Creating an account signs you in immediately; after signing out, use the same email and password to return. Multiple people can keep separate accounts on one device, and each account only sees its own documents.
 - Document upload/list/download/delete.
 - Working PDF info, merge, split, rotate, remove/extract pages, protect/unlock, text extraction and content-stream compression endpoints.
-- AI Documents: summarize a selected workspace file, ask context-aware questions, and translate supported documents into 12 languages plus Tanglish. AI uses a configured `LLM_API_KEY` provider or local Ollama.
+- AI Documents: summarize a selected workspace file, ask context-aware questions, and translate PDF/DOCX/TXT/Markdown files into any of 12 languages plus Tanglish. AI actions need `LLM_API_KEY`.
 - Browser voice input and speech playback for chat and document responses, using the language selected in the workspace. Available voices depend on the browser and operating system.
 - Six editable PDF templates (resume, cover letter, business letter, meeting notes, proposal, invoice), with layout/color options and an optional resume photo.
 - Searchable, type-filtered document history with private download, delete, and AI actions.
@@ -35,7 +35,7 @@ npm run dev
 ```
 Open http://localhost:5173
 
-For local AI without a cloud key, install and start Ollama, then pull a model (example: `ollama pull llama3.2`). The backend defaults to `OLLAMA_BASE_URL=http://127.0.0.1:11434` and `OLLAMA_MODEL=llama3.2`; you can override these in `backend/.env`. If you prefer a cloud-compatible provider, set `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` instead. Ollama availability depends on the local service and the model being installed.
+Add `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` to `backend/.env`.
 SQLite is used locally. PostgreSQL can be configured through `DATABASE_URL`.
 
 ## Connect the backend to Supabase Postgres

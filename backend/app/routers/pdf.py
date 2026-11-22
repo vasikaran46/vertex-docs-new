@@ -328,6 +328,64 @@ async def preview_page(file:UploadFile=File(...),page:int=Form(1),u=Depends(curr
     except Exception as error:
         raise HTTPException(400,"The PDF could not be rendered") from error
 
+PAGE_SIZES={"A4":(595.28,841.89),"Letter":(612.0,792.0)}
+
+@router.post("/blank")
+async def blank_pdf(pages:int=Form(1),page_size:str=Form("A4"),u=Depends(current_user)):
+    """Create a new blank PDF (used by PDF Studio's New Blank Document)."""
+    if pages<1 or pages>200:
+        raise HTTPException(400,"Choose between 1 and 200 pages")
+    if page_size not in PAGE_SIZES:
+        raise HTTPException(400,"Page size must be A4 or Letter")
+    width,height=PAGE_SIZES[page_size]
+    document=pymupdf.open()
+    for _ in range(pages):
+        document.new_page(width=width,height=height)
+    output=document.tobytes(garbage=4,deflate=True)
+    document.close()
+    _log_pdf(u,"blank",{"page_count":pages,"output_size_bytes":len(output)})
+    return StreamingResponse(io.BytesIO(output),media_type="application/pdf",headers={"Content-Disposition":'attachment; filename="vertex-blank.pdf"'})
+
+@router.post("/insert-blank")
+async def insert_blank_page(
+    file:UploadFile=File(...),
+    position:int=Form(...),
+    count:int=Form(1),
+    u=Depends(current_user),
+):
+    """Insert blank page(s) so the first new page becomes page number ``position`` of the existing PDF.
+
+    ``position`` may be 1..page_count+1 (page_count+1 appends at the end). The new page copies the size
+    of the page it is inserted next to, so it matches the rest of the document.
+    """
+    if count<1 or count>50:
+        raise HTTPException(400,"You can add between 1 and 50 pages at a time")
+    data=await file.read(50*1024*1024+1)
+    if len(data)>50*1024*1024:
+        raise HTTPException(413,"Files must be 50 MB or smaller")
+    try:
+        document=pymupdf.open(stream=data,filetype="pdf")
+    except Exception as error:
+        raise HTTPException(400,"The PDF could not be opened") from error
+    try:
+        total=document.page_count
+        if position<1 or position>total+1:
+            raise HTTPException(400,f"Choose a page number between 1 and {total+1}")
+        neighbour=document.load_page(position-1 if position<=total else total-1).rect if total else None
+        width,height=(neighbour.width,neighbour.height) if neighbour else PAGE_SIZES["A4"]
+        for offset in range(count):
+            document.new_page(pno=position-1+offset,width=width,height=height)
+        output=document.tobytes(garbage=4,deflate=True)
+        new_total=document.page_count
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(400,"The page could not be added to this PDF") from error
+    finally:
+        document.close()
+    _log_pdf(u,"insert_blank",{"page_number":position,"page_count":new_total,"output_size_bytes":len(output)},file_name=(file.filename if hasattr(file,'filename') else None))
+    return StreamingResponse(io.BytesIO(output),media_type="application/pdf",headers={"Content-Disposition":'attachment; filename="vertex-edited.pdf"',"X-Page-Count":str(new_total)})
+
 @router.post("/annotate")
 async def annotate_page(
     file:UploadFile=File(...),

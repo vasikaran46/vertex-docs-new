@@ -29,10 +29,10 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 
 logger = logging.getLogger(__name__)
-MAX_FILE_BYTES = 50 * 1024 * 1024
-MAX_PDF_PAGES = 100
-MAX_ZIP_ENTRIES = 25
-MAX_ZIP_UNPACKED_BYTES = 50 * 1024 * 1024
+MAX_FILE_BYTES = 100 * 1024 * 1024
+MAX_PDF_PAGES = 500
+MAX_ZIP_ENTRIES = 200
+MAX_ZIP_UNPACKED_BYTES = 200 * 1024 * 1024
 SUPPORTED_SOURCE_EXTENSIONS = {
     "doc", "docx", "ppt", "pptx", "xls", "xlsx", "html", "htm",
     "jpg", "jpeg", "png", "webp", "txt", "md", "rtf", "hwp", "zip",

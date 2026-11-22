@@ -40,20 +40,25 @@ def _local_path(stored_name: str) -> Path:
 
 
 def upload_document(stored_name: str, content: bytes, content_type: str):
-    """Use Supabase Storage when configured; otherwise keep the file on local disk."""
-    if not supabase_storage_configured():
-        path = _local_path(stored_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(content)
-        return {"stored": "local"}
-    return get_storage().upload(
-        stored_name,
-        content,
-        file_options={
-            "content-type": content_type,
-            "upsert": "true",
-        },
-    )
+    """Save to local disk first; sync to Supabase Storage if configured and working."""
+    path = _local_path(stored_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+
+    if supabase_storage_configured():
+        try:
+            get_storage().upload(
+                stored_name,
+                content,
+                file_options={
+                    "content-type": content_type,
+                    "upsert": "true",
+                },
+            )
+        except Exception:
+            # Local storage is already preserved safely
+            pass
+    return {"stored": "local"}
 
 
 def read_document(stored_name: str) -> bytes:

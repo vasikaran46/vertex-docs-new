@@ -17,15 +17,9 @@ class AuthOut(BaseModel):
     token_type:Literal["bearer"]="bearer"
     user:UserOut
 class PreferencesIn(BaseModel):
-    theme:Literal[
-        "forest-light","forest-dark","rose-light","rose-dark","graphite-light","graphite-dark",
-        "cocoa-light","cocoa-dark","amber-light","amber-dark","ocean-light","ocean-dark",
-        "green-white-light","green-white-dark","midnight-luxury-light","midnight-luxury-dark",
-        "sage-balance-light","sage-balance-dark","nordic-espresso-light","nordic-espresso-dark",
-        "steel-minimalist-light","steel-minimalist-dark","warm-plum-light","warm-plum-dark",
-        "deep-teal-light","deep-teal-dark",
-        "forest","rose","graphite","cocoa","amber","ocean","porcelain","mint","sand","sage","dark","light",
-    ]|None=None
+    # Theme ids are validated by shape rather than a fixed list so new colour themes can ship
+    # from the frontend without a schema change. Legacy ids ("forest-dark", "dark", ...) are still accepted.
+    theme:str|None=Field(default=None,pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$",min_length=2,max_length=24)
     language:str|None=None
     avatar:Literal["robo","nova","finn","milo","pip","wiz"]|None=None
 class ChatTurn(BaseModel):

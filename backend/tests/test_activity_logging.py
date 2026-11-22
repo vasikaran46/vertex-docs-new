@@ -185,7 +185,7 @@ class ActivityLoggingTests(ApiTestCase):
                 json={"text": "Hello", "source_language": "en", "target_language": "fr"},
             )
         self.assertEqual(translated.status_code, 200, translated.text)
-        self.assertEqual(set(translated.json()), {"translation", "source_language", "target_language"})
+        self.assertEqual(set(translated.json()), {"translation", "source_language", "target_language", "provider"})
         with patch("app.routers.ai.ai_completion", return_value="Hello there"):
             chatted = self.client.post(
                 "/api/ai/chat",
@@ -210,7 +210,8 @@ class ActivityLoggingTests(ApiTestCase):
                 json={"text": source_text, "writing_style": "professional", "strength": 4},
             )
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json(), {"humanized_text": "The sentence now reads naturally."})
+        self.assertEqual(response.json()["humanized_text"], "The sentence now reads naturally.")
+        self.assertEqual(response.json()["engine"], "model")
         self.assertEqual(completion.call_args.args[0][1]["content"], source_text)
         self.assertIn("professional wording", completion.call_args.args[0][0]["content"])
         self.assertIn("strength 4 of 5", completion.call_args.args[0][0]["content"])

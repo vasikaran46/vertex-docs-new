@@ -5,9 +5,10 @@ import {
   Menu, Moon, Search, Send, Settings2, ShieldCheck, Sparkles, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Indent, Outdent, RemoveFormatting,
   Sun, Trash2, UploadCloud, X, Scissors, RotateCw, LockKeyhole, Pencil, Pen, Redo2, Save, Undo2,
   Mic, Volume2, BookOpen, MessageCircle, ArrowDownToLine, RefreshCw, UserRound,
-  Users, Eye, FolderOpen, Share2, SquarePen,
+  Users, Eye, FolderOpen, Share2, SquarePen, Palette,
 } from 'lucide-react';
 import { companions, conversionTools, groups, languages, palettes, tools, type ConversionTool } from './catalogue';
+import { applyTheme, CUSTOM_THEME, readCustomColours, saveCustomColours, themeDef, themeFrom, themes } from './themes';
 import { VertexAssistant } from './features/assistant/VertexAssistant';
 import { AiDocChat } from './features/ai-intelligence/AiDocChat';
 import { supabase } from './lib/supabase';
@@ -22,7 +23,13 @@ import { ActivityList } from './features/history/ActivityList';
 import { DocumentPreview } from './features/documents/DocumentPreview';
 import { PdfAnnotator } from './features/annotator/PdfAnnotator';
 import './features/additions.css';
-import BlankPdfEditor from './features/pdf-studio/BlankPdfEditor';
+import { InlinePdfTools, type InlineKind } from './features/convert/InlinePdfTools';
+import { InlineSummarizer } from './features/convert/InlineSummarizer';
+import { InlineEditPdf } from './features/convert/InlineEditPdf';
+import { DocumentEditor } from './features/convert/DocumentEditor';
+import { TemplateStudio } from './features/templates/TemplateStudio';
+import { EditorToolbar } from './features/pdf-studio/EditorToolbar';
+import { applyBlockCss, applyListStyle, clickAndType, ensureBlocks, EDITOR_CSS, tableHtml, transformCase, type ListStyleOption } from './features/pdf-studio/richText';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const AI_READABLE_EXTENSIONS = [
@@ -31,8 +38,7 @@ const AI_READABLE_EXTENSIONS = [
 ];
 const AI_READABLE_ACCEPT = [...AI_READABLE_EXTENSIONS.map((extension) => `.${extension}`), 'application/pdf', 'image/png', 'image/jpeg', 'image/webp'].join(',');
 
-type PaletteId = (typeof palettes)[number]['id'];
-type ThemeName = `${PaletteId}-${'light' | 'dark'}`;
+type ThemeName = string;
 type TemplateAccent = 'forest' | 'rose' | 'graphite' | 'cocoa' | 'amber' | 'ocean';
 type EditorTool = 'text' | 'highlight' | 'pen' | 'pencil' | 'eraser';
 type ExportFormat = 'pdf' | 'docx' | 'txt';
@@ -58,10 +64,15 @@ function editorPlainText(html: string) {
   return node.innerText || node.textContent || '';
 }
 
-async function drawRichText(context: CanvasRenderingContext2D, html: string, width: number, height: number) {
-  if (!editorPlainText(html).trim()) return;
-  const safeHtml = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
-  const markup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="box-sizing:border-box;width:${width}px;height:${height}px;padding:${height * .09}px ${width * .09}px;color:#262b28;background:transparent;font:14px/1.65 'Segoe UI',Arial,sans-serif;overflow:hidden">${safeHtml}</div></foreignObject></svg>`;
+async function drawRichText(context: CanvasRenderingContext2D, html: string, width: number, height: number, screen?: { w: number; h: number }) {
+  if (!editorPlainText(html).trim() && !/<(img|table|hr)/i.test(html)) return;
+  // Lay the text out at the on-screen page size so the exported page matches what you see, then scale up.
+  const sw = Math.max(200, Math.round(screen?.w ?? 470));
+  const sh = Math.max(200, Math.round(screen?.h ?? (470 * height) / width));
+  const holder = document.createElement('div');
+  holder.innerHTML = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+  const body = new XMLSerializer().serializeToString(holder); // well-formed XHTML (closes <br>, escapes entities)
+  const markup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${sw} ${sh}"><foreignObject width="${sw}" height="${sh}"><div xmlns="http://www.w3.org/1999/xhtml" class="vd-rich" style="box-sizing:border-box;width:${sw}px;height:${sh}px;padding:${sh * .09}px ${sw * .09}px ${sh * .08}px;color:#262b28;background:transparent;font:14px/1.65 'Segoe UI',Arial,sans-serif;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere"><style>${EDITOR_CSS.replace(/</g, '&lt;')}</style>${body.replace(/^<div[^>]*>|<\/div>$/g, '')}</div></foreignObject></svg>`;
   const image = new Image();
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
   await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Formatted text could not be rendered.')); });
@@ -328,26 +339,6 @@ function LayerIcon({ size = 20 }: { size?: number }) {
   return <span aria-hidden="true" className="layers-icon" style={{ width: size, height: size }}>▦</span>;
 }
 
-function themeFrom(value: string | null | undefined): ThemeName {
-  if (palettes.some((palette) => value === `${palette.id}-light` || value === `${palette.id}-dark`)) return value as ThemeName;
-  const legacyThemes: Record<string, ThemeName> = {
-    light: 'forest-light',
-    dark: 'graphite-dark',
-    forest: 'forest-light',
-    rose: 'rose-light',
-    graphite: 'graphite-light',
-    cocoa: 'cocoa-light',
-    amber: 'amber-light',
-    ocean: 'ocean-light',
-    porcelain: 'graphite-light',
-    mint: 'forest-light',
-    sage: 'forest-light',
-    sand: 'cocoa-light',
-  };
-  if (value && legacyThemes[value]) return legacyThemes[value];
-  return 'forest-light';
-}
-
 function companionFrom(value: string | null | undefined) {
   return companions.find((companion) => companion.id === value)
     ?? companions.find((companion) => companion.id === 'pip')
@@ -483,6 +474,22 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState('');
+  const [backendProblem, setBackendProblem] = useState('');
+
+  // Make a wrong VITE_API_URL (for example the translation service port 8001) obvious instead of silently failing.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8000);
+    fetch(`${API}/api/health`, { signal: controller.signal })
+      .then(async (response) => {
+        const body = response.ok ? await response.json().catch(() => null) : null;
+        if (!cancelled) setBackendProblem(body?.service === 'Vertex Docs API' ? '' : `The app reached ${API}, but that is not the Vertex Docs backend. Set VITE_API_URL=http://localhost:8000 in frontend/.env (8001 is the translation service) and restart npm run dev.`);
+      })
+      .catch(() => { if (!cancelled) setBackendProblem(`Cannot reach the Vertex Docs backend at ${API}. Start it (port 8000) and check VITE_API_URL in frontend/.env.`); })
+      .finally(() => window.clearTimeout(timer));
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(timer); };
+  }, []);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All tools');
   const [activeConversion, setActiveConversion] = useState<ConversionTool | null>(null);
@@ -506,6 +513,7 @@ export default function App() {
   const [advancedOutput, setAdvancedOutput] = useState<ProcessedPdf | null>(null);
   const [advancedTextOutput, setAdvancedTextOutput] = useState('');
   const [isBlankDoc, setIsBlankDoc] = useState(false);
+  const [inlineTool, setInlineTool] = useState<{ type: 'pdf'; kind: InlineKind } | { type: 'summarize' | 'edit' | 'doc' } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [recentUpload, setRecentUpload] = useState<RecentUpload | null>(null);
@@ -646,8 +654,7 @@ export default function App() {
   const [templateBusy, setTemplateBusy] = useState(false);
 
   const companion = companionFrom(avatar);
-  const themeMode: 'light' | 'dark' = theme.endsWith('-dark') ? 'dark' : 'light';
-  const paletteId = theme.slice(0, -(themeMode.length + 1)) as PaletteId;
+  const [customColours, setCustomColours] = useState(readCustomColours);
 
   const adminFetch = useCallback(async <T,>(path: string): Promise<T> => {
     const response = await fetch(`${API}/api/admin/${path}`, {
@@ -748,9 +755,9 @@ export default function App() {
   }, [adminAccess, token, adminFetch, adminActivityOffset, adminUsersOffset, selectedAdminUser, adminUserActivityOffset, adminRefreshVersion]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    applyTheme(theme);
     localStorage.setItem('vd-theme', theme);
-  }, [theme]);
+  }, [theme, customColours]);
 
   useEffect(() => {
     localStorage.setItem('vd-avatar', avatar);
@@ -1650,6 +1657,7 @@ export default function App() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body,
+        signal: AbortSignal.timeout(120000),
       });
       if (!response.ok) throw new Error(await responseError(response));
       const result = await response.json() as { text: string };
@@ -1800,9 +1808,9 @@ export default function App() {
         }),
       });
       if (!response.ok) throw new Error(await responseError(response));
-      const result = await response.json() as { humanized_text: string };
+      const result = await response.json() as { humanized_text: string; notice?: string };
       setHumanizerOutput(result.humanized_text);
-      setHumanizerNotice('Your rewritten text is ready. Review it before using it.');
+      setHumanizerNotice(`Your rewritten text is ready. Review it before using it.${result.notice ? ` ${result.notice}` : ''}`);
     } catch (error) {
       setHumanizerError(error instanceof Error ? error.message : 'Could not rewrite the text.');
     } finally {
@@ -2597,6 +2605,180 @@ export default function App() {
     rememberEditorSelection();
   }
 
+  function pageScreenSize() {
+    const page = editorPageRef.current;
+    return page ? { w: page.clientWidth, h: page.clientHeight } : undefined;
+  }
+
+  const [editorFont, setEditorFont] = useState('Arial');
+  const [editorFontSize, setEditorFontSize] = useState(14);
+
+  /** Restore the saved selection, record undo history, run an edit, and sync state. */
+  function editorEdit(fn: (editor: HTMLElement, range: Range | null) => void) {
+    const editor = editorTextRef.current;
+    if (!editor) return;
+    editor.focus();
+    ensureBlocks(editor);
+    const selection = window.getSelection();
+    if (editorSelectionRef.current && selection) {
+      selection.removeAllRanges();
+      selection.addRange(editorSelectionRef.current);
+    }
+    pushEditorHistory();
+    document.execCommand('styleWithCSS', false, 'true');
+    fn(editor, selection && selection.rangeCount ? selection.getRangeAt(0) : null);
+    setEditorText(editor.innerHTML);
+    rememberEditorSelection();
+  }
+
+  function studioFontFamily(family: string) {
+    setEditorFont(family);
+    editorEdit((editor, range) => {
+      if (range && range.collapsed) {
+        const span = document.createElement('span');
+        span.style.fontFamily = `"${family}"`;
+        span.textContent = '\u200B';
+        range.insertNode(span);
+        range.setStart(span.firstChild as Node, 1);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else {
+        document.execCommand('fontName', false, family);
+      }
+    });
+  }
+
+  function studioFontSize(size: number) {
+    setEditorFontSize(size);
+    editorEdit((editor, range) => {
+      if (range && range.collapsed) {
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        span.textContent = '\u200B';
+        range.insertNode(span);
+        range.setStart(span.firstChild as Node, 1);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return;
+      }
+      document.execCommand('fontSize', false, '7');
+      editor.querySelectorAll('font[size="7"], span[style*="xxx-large"]').forEach((node) => {
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        span.innerHTML = (node as HTMLElement).innerHTML;
+        node.replaceWith(span);
+      });
+    });
+  }
+
+  function studioCommand(command: string, value?: string) {
+    editorEdit(() => { document.execCommand(command, false, command === 'formatBlock' ? `<${value}>` : value); });
+  }
+  function studioBullet(option: ListStyleOption) { editorEdit((editor) => applyListStyle(editor, false, option)); }
+  function studioNumber(option: ListStyleOption) { editorEdit((editor) => applyListStyle(editor, true, option)); }
+  function studioLineSpacing(value: string) { editorEdit((editor, range) => applyBlockCss(editor, range, { lineHeight: value })); }
+  function studioParagraphGap(px: string) { editorEdit((editor, range) => applyBlockCss(editor, range, { marginBottom: `${px}px` })); }
+  function studioCase(option: string) {
+    editorEdit((_editor, range) => {
+      const text = range?.toString() ?? '';
+      if (text) document.execCommand('insertText', false, transformCase(text, option));
+    });
+  }
+  function studioSymbol(symbol: string) { editorEdit(() => { document.execCommand('insertText', false, symbol); }); }
+  function studioTable(rows: number, cols: number) { editorEdit(() => { document.execCommand('insertHTML', false, tableHtml(rows, cols)); }); }
+
+  /** Click anywhere on the page to start typing there (adds the blank lines / indent needed). */
+  function pageMouseDown(event: React.MouseEvent<HTMLDivElement>) {
+    if (editorTool !== 'text') return;
+    const editor = editorTextRef.current;
+    if (!editor) return;
+    if (clickAndType(editor, event.clientX, event.clientY)) {
+      event.preventDefault();
+      setEditorText(editor.innerHTML);
+      rememberEditorSelection();
+    }
+  }
+
+  const [newPageDialog, setNewPageDialog] = useState<{ open: boolean; value: string; busy: boolean; error: string }>({ open: false, value: '1', busy: false, error: '' });
+
+  function openNewPageDialog() {
+    const total = editorPdfFile ? pdfPageCount : 1;
+    setNewPageDialog({ open: true, value: String(editorPdfFile ? Math.min(total + 1, pdfPageNumber + 1) : 2), busy: false, error: '' });
+  }
+
+  async function postForPdf(path: string, form: FormData, name: string) {
+    const response = await fetch(`${API}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new Error(await responseError(response));
+    const blob = await response.blob();
+    return new File([blob], name, { type: 'application/pdf' });
+  }
+
+  /** Insert a blank page at `position` of the open PDF (or of the current page when no PDF is open). */
+  async function addPageAt(position: number) {
+    if (!token) { setNewPageDialog((d) => ({ ...d, error: 'Sign in to add pages.' })); return; }
+    const total = editorPdfFile ? pdfPageCount : 1;
+    if (!Number.isInteger(position) || position < 1 || position > total + 1) {
+      setNewPageDialog((d) => ({ ...d, error: `Enter a page number from 1 to ${total + 1}.` }));
+      return;
+    }
+    setNewPageDialog((d) => ({ ...d, busy: true, error: '' }));
+    try {
+      const hasEdits = Boolean(editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+      let base: File;
+      if (editorPdfFile && hasEdits) {
+        const form = new FormData();
+        form.append('file', editorPdfFile);
+        form.append('page', String(pdfPageNumber));
+        form.append('overlay_data', await editorPdfOverlay());
+        base = await postForPdf('/api/pdf/annotate', form, editorPdfFile.name);
+      } else if (editorPdfFile) {
+        base = editorPdfFile;
+      } else if (hasEdits) {
+        const body: Record<string, string> = { content: editorPlainText(editorText), output_format: 'pdf', page_size: 'A4', page_preview_data: await editorPagePreview() };
+        if (editorImagePreview) body.image_data = editorImagePreview.split(',')[1];
+        const response = await fetch(`${API}/api/pdf/editor-export`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+        if (!response.ok) throw new Error(await responseError(response));
+        base = new File([await response.blob()], 'vertex-document.pdf', { type: 'application/pdf' });
+      } else {
+        const form = new FormData();
+        form.append('pages', '1');
+        form.append('page_size', 'A4');
+        base = await postForPdf('/api/pdf/blank', form, 'vertex-document.pdf');
+      }
+      const form = new FormData();
+      form.append('file', base);
+      form.append('position', String(position));
+      const updated = await postForPdf('/api/pdf/insert-blank', form, base.name);
+      setEditorText('');
+      setEditorUndoHistory([]);
+      setEditorRedoHistory([]);
+      setEditorImageSource('');
+      setEditorImageName('');
+      setEditorImageSelected(false);
+      setDrawingHistory([]);
+      setPdfOutput(null);
+      setPdfResult(`Added a new page as page ${position}. Your document now has ${total + 1} pages.`);
+      setPdfFiles([updated]);
+      setPdfPageNumber(position);
+      await renderPdfPage(updated, position);
+      setNewPageDialog({ open: false, value: '1', busy: false, error: '' });
+    } catch (error) {
+      setNewPageDialog((d) => ({ ...d, busy: false, error: error instanceof Error ? error.message : 'The page could not be added.' }));
+    }
+  }
+
+  function startBlankDocument() {
+    const hasWork = Boolean(pdfOutput || pdfFiles.length || editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+    if (hasWork && !window.confirm('Start a new blank document? Anything you have not saved or downloaded will be cleared.')) return;
+    resetEditor();
+    setPdfAction('info');
+    window.setTimeout(() => { const editor = editorTextRef.current; if (editor) { ensureBlocks(editor); editor.focus(); } }, 50);
+  }
+
   function clearEditorFormatting() {
     formatEditor('removeFormat');
     formatEditor('unlink');
@@ -3032,7 +3214,7 @@ export default function App() {
     context.fillRect(0, 0, preview.width, preview.height);
     const drawing = drawingCanvasRef.current;
     if (drawing) context.drawImage(drawing, 0, 0, preview.width, preview.height);
-    await drawRichText(context, editorText, preview.width, preview.height);
+    await drawRichText(context, editorText, preview.width, preview.height, pageScreenSize());
     if (editorImagePreview) {
       const image = await loadImage(editorImagePreview);
       const width = preview.width * editorImageSize.width / 100;
@@ -3052,7 +3234,7 @@ export default function App() {
     if (!context) throw new Error('Document editing is not available in this browser.');
     const drawing = drawingCanvasRef.current;
     if (drawing) context.drawImage(drawing, 0, 0, overlay.width, overlay.height);
-    await drawRichText(context, editorText, overlay.width, overlay.height);
+    await drawRichText(context, editorText, overlay.width, overlay.height, pageScreenSize());
     if (editorImagePreview) {
       const image = await loadImage(editorImagePreview);
       const width = overlay.width * editorImageSize.width / 100;
@@ -3326,9 +3508,24 @@ export default function App() {
     return (
       <>
         <PageHeading eyebrow="PDF STUDIO" title="A clear space for document work" subtitle="Edit a new page or run a PDF tool. Results appear here for review before you keep them." />
+        {newPageDialog.open && <div className="vd-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !newPageDialog.busy) setNewPageDialog((d) => ({ ...d, open: false })); }}>
+          <form className="vd-dialog" noValidate role="dialog" aria-modal="true" aria-labelledby="new-page-title" onSubmit={(event) => { event.preventDefault(); void addPageAt(Number(newPageDialog.value)); }}>
+            <h3 id="new-page-title">Add a new page</h3>
+            <p>{editorPdfFile ? `Your PDF has ${pdfPageCount} page${pdfPageCount === 1 ? '' : 's'}.` : 'Your blank document has 1 page.'} The new page becomes the page number you choose, and the pages after it move down.</p>
+            <label className="field-label">New page at page number
+              <input autoFocus type="number" min={1} max={(editorPdfFile ? pdfPageCount : 1) + 1} value={newPageDialog.value} onChange={(event) => setNewPageDialog((d) => ({ ...d, value: event.target.value, error: '' }))} />
+            </label>
+            <small>1 puts it first. {(editorPdfFile ? pdfPageCount : 1) + 1} adds it at the end.</small>
+            {newPageDialog.error && <p className="ai-error" role="alert">{newPageDialog.error}</p>}
+            <div className="vd-dialog-actions">
+              <button type="button" disabled={newPageDialog.busy} onClick={() => setNewPageDialog((d) => ({ ...d, open: false }))}>Cancel</button>
+              <button type="submit" className="primary" disabled={newPageDialog.busy}>{newPageDialog.busy ? 'Adding…' : 'Add page'}</button>
+            </div>
+          </form>
+        </div>}
         <div className="pdf-editor-toolbar">
-          <button onClick={resetEditor}><FilePlus2 size={15} /> New page</button>
-          <button className="primary" onClick={() => setIsBlankDoc(true)}><FilePlus2 size={15} /> New Blank Document</button>
+          <button onClick={openNewPageDialog}><FilePlus2 size={15} /> New page</button>
+          <button className="primary" onClick={startBlankDocument}><FilePlus2 size={15} /> New Blank Document</button>
           <button onClick={() => pdfFileInputRef.current?.click()}><UploadCloud size={15} /> Open PDF</button>
           <input ref={pdfFileInputRef} type="file" accept="application/pdf,.pdf" onChange={(event) => { selectPdfFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
           <button disabled={!token || pdfSaveBusy || editorBusy || (!pdfOutput && !hasEditorWork)} onClick={() => void saveEditor()}><Save size={15} /> {pdfSaveBusy ? 'Saving…' : 'Save'}</button>
@@ -3340,18 +3537,23 @@ export default function App() {
           <button className="primary" disabled={!token || editorBusy} onClick={() => void exportEditor()}>{editorBusy ? 'Creating…' : `Create ${editorExportFormat.toUpperCase()}`}</button>
           <button disabled={!hasEditorWork || (!token && !editorPdfFile && !pdfOutput)} onClick={() => void downloadEditor()}><Download size={15} /> Download</button>
         </div>
-        <div className="word-format-toolbar" role="toolbar" aria-label="Text formatting" onMouseDown={(event) => { if ((event.target as HTMLElement).closest('button')) event.preventDefault(); }}>
-          <select aria-label="Font family" defaultValue="Arial" onFocus={rememberEditorSelection} onChange={(event) => formatEditor('fontName', event.target.value)}><option>Arial</option><option>Calibri</option><option>Georgia</option><option>Times New Roman</option><option>Verdana</option></select>
-          <select aria-label="Font size" defaultValue="14" onFocus={rememberEditorSelection} onChange={(event) => applyFontSize(event.target.value)}>{[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48].map((size) => <option key={size} value={size}>{size}</option>)}</select>
-          <span className="word-toolbar-divider" />
-          <button title="Bold" aria-label="Bold" onClick={() => formatEditor('bold')}><Bold size={15} /></button><button title="Italic" aria-label="Italic" onClick={() => formatEditor('italic')}><Italic size={15} /></button><button title="Underline" aria-label="Underline" onClick={() => formatEditor('underline')}><Underline size={15} /></button><button title="Strikethrough" aria-label="Strikethrough" onClick={() => formatEditor('strikeThrough')}><Strikethrough size={15} /></button>
-          <label className="word-color-control" title="Font colour" aria-label="Font colour"><span>A</span><input type="color" defaultValue="#252b38" onFocus={rememberEditorSelection} onChange={(event) => formatEditor('foreColor', event.target.value)} /></label>
-          <label className="word-color-control highlight-control" title="Text highlight" aria-label="Text highlight"><Highlighter size={15} /><input type="color" defaultValue="#fff2a1" onFocus={rememberEditorSelection} onChange={(event) => formatEditor('hiliteColor', event.target.value)} /></label>
-          <span className="word-toolbar-divider" />
-          <button title="Align left" aria-label="Align left" onClick={() => formatEditor('justifyLeft')}><AlignLeft size={15} /></button><button title="Centre" aria-label="Centre" onClick={() => formatEditor('justifyCenter')}><AlignCenter size={15} /></button><button title="Align right" aria-label="Align right" onClick={() => formatEditor('justifyRight')}><AlignRight size={15} /></button><button title="Justify" aria-label="Justify" onClick={() => formatEditor('justifyFull')}><AlignJustify size={15} /></button>
-          <button title="Bulleted list" aria-label="Bulleted list" onClick={() => formatEditor('insertUnorderedList')}><List size={15} /></button><button title="Numbered list" aria-label="Numbered list" onClick={() => formatEditor('insertOrderedList')}><ListOrdered size={15} /></button><button title="Decrease indent" aria-label="Decrease indent" onClick={() => formatEditor('outdent')}><Outdent size={15} /></button><button title="Increase indent" aria-label="Increase indent" onClick={() => formatEditor('indent')}><Indent size={15} /></button>
-          <button title="Clear formatting" aria-label="Clear formatting" onClick={clearEditorFormatting}><RemoveFormatting size={15} /></button>
-        </div>
+        <EditorToolbar
+          fontFamily={editorFont}
+          fontSize={editorFontSize}
+          onRemember={rememberEditorSelection}
+          onCommand={studioCommand}
+          onFontFamily={studioFontFamily}
+          onFontSize={studioFontSize}
+          onBullet={studioBullet}
+          onNumber={studioNumber}
+          onLineSpacing={studioLineSpacing}
+          onParagraphGap={studioParagraphGap}
+          onCase={studioCase}
+          onSymbol={studioSymbol}
+          onTable={studioTable}
+          onImage={() => imageFileInputRef.current?.click()}
+          onClear={clearEditorFormatting}
+        />
         <div className="pdf-editor-layout">
           <section className="panel pdf-tool-panel">
             <div className="section-title"><div><h2>PDF tools</h2><p>Select an action, choose your file, and review its result in this page.</p></div></div>
@@ -3396,6 +3598,8 @@ export default function App() {
                     suppressContentEditableWarning
                     spellCheck
                     onInput={(event) => { pushEditorHistory(); setEditorText(event.currentTarget.innerHTML); }}
+                    onMouseDown={pageMouseDown}
+                    onFocus={(event) => { ensureBlocks(event.currentTarget); }}
                     onMouseUp={rememberEditorSelection}
                     onKeyUp={rememberEditorSelection}
                     style={{ pointerEvents: editorTool === 'text' ? 'auto' : 'none' }}
@@ -3785,15 +3989,40 @@ export default function App() {
       <section className="panel conversion-panel advanced-tool-panel">
         <div className="section-title">
           <div><h2>{selectedAdvancedTool}</h2><p>{config.description}</p></div>
-          <button onClick={() => {
-            if (advancedOutput) URL.revokeObjectURL(advancedOutput.url);
-            setSelectedAdvancedTool(null);
-            setAdvancedFiles([]);
-            setAdvancedOutput(null);
-            setAdvancedTextOutput('');
-            setAdvancedError('');
-            setAdvancedNotice('');
-          }}>Clear selection</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {advancedFiles.length > 0 && (
+              <label className="button secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', margin: 0 }}>
+                Insert another PDF
+                <input type="file" accept={accepts} multiple={multiple} style={{ display: 'none' }} onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = '';
+                  if (files.some((file) => file.size > 50 * 1024 * 1024)) {
+                    setAdvancedError('Each file must be 50 MB or smaller.');
+                    return;
+                  }
+                  if (multiple) {
+                    setAdvancedFiles((current) => [...current, ...files].slice(-2));
+                  } else if (files.length > 0) {
+                    setAdvancedFiles(files);
+                  }
+                  setAdvancedError('');
+                  setAdvancedNotice('');
+                  if (advancedOutput) URL.revokeObjectURL(advancedOutput.url);
+                  setAdvancedOutput(null);
+                  setAdvancedTextOutput('');
+                }} />
+              </label>
+            )}
+            <button onClick={() => {
+              if (advancedOutput) URL.revokeObjectURL(advancedOutput.url);
+              setSelectedAdvancedTool(null);
+              setAdvancedFiles([]);
+              setAdvancedOutput(null);
+              setAdvancedTextOutput('');
+              setAdvancedError('');
+              setAdvancedNotice('');
+            }}>Clear selection</button>
+          </div>
         </div>
         {requiresProvider ? <p className="ai-error" role="status">{config.description}</p> : <>
           <label className="file-drop conversion-file-picker">
@@ -3866,7 +4095,13 @@ export default function App() {
     return (
       <>
         <PageHeading eyebrow="CONVERT & ORGANIZE" title={page} subtitle="Search the complete tool catalogue. Working tools are marked and connected to the backend." />
-        {selectedAdvancedTool ? renderAdvancedToolPanel() : scanMode ? renderScanPanel() : renderConversionPanel()}
+        {inlineTool ? (
+          !token ? <section className="panel inline-tool"><p className="inline-hint">Sign in to use this tool.</p><button onClick={() => setInlineTool(null)}>Close</button></section>
+            : inlineTool.type === 'pdf' ? <InlinePdfTools key={inlineTool.kind} kind={inlineTool.kind} token={token} onClose={() => setInlineTool(null)} onSaved={() => void loadDocuments()} />
+            : inlineTool.type === 'summarize' ? <InlineSummarizer token={token} onClose={() => setInlineTool(null)} />
+            : inlineTool.type === 'edit' ? <InlineEditPdf token={token} onClose={() => setInlineTool(null)} onSaved={() => void loadDocuments()} />
+            : <DocumentEditor token={token} onClose={() => setInlineTool(null)} />
+        ) : selectedAdvancedTool ? renderAdvancedToolPanel() : scanMode ? renderScanPanel() : renderConversionPanel()}
         <div className="search-bar"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search documents, tools or features..." /></div>
         <div className="category-tabs" role="tablist" aria-label="Tool categories">
           {['All tools', ...Object.keys(groups)].map((item) => (
@@ -3880,7 +4115,21 @@ export default function App() {
             const toolName = item.name.toLowerCase();
             const advancedConfig = advancedToolConfigs[toolName];
             const providerRequired = advancedConfig?.mode === 'provider-required';
+            const inlineKinds: Record<string, InlineKind> = {
+              'merge pdf': 'merge', 'split pdf': 'split', 'rotate pdf': 'rotate', 'remove pages': 'remove-pages',
+              'extract pages': 'extract-pages', 'organize pdf': 'organize', 'protect pdf': 'protect', 'unlock pdf': 'unlock',
+              'compress pdf': 'compress', 'flip pdf': 'flip', 'read pdf': 'read', 'pdf reader': 'read',
+            };
+            const otherInline: Record<string, 'summarize' | 'edit' | 'doc'> = { 'ai pdf summarizer': 'summarize', 'edit pdf': 'edit', 'word and document editor': 'doc' };
+            const goesToPage: Record<string, PageName> = {
+              'ai documents': 'AI Documents',
+              'document history': 'Document History',
+              'pdf translator': 'Language Bridge',
+              'humanizer': 'Humanizer',
+            };
+            const builtIn = Boolean(inlineKinds[toolName] || otherInline[toolName] || goesToPage[toolName] || toolName === 'vertex ai assistant');
             const supported = Boolean(conversion)
+              || builtIn
               || toolName === 'share pdf'
               || (capability?.supported ?? false)
               || Boolean(advancedConfig && !providerRequired);
@@ -3901,6 +4150,18 @@ export default function App() {
             const icon = supported ? <FileText size={20} /> : <CircleAlert size={20} />;
             return (
               <button className={`catalogue-card ${supported ? '' : 'not-ready'}`} key={`${item.category}-${item.name}`} onClick={() => {
+                setInlineTool(null);
+                if (!conversion) {
+                  if (inlineKinds[toolName] || otherInline[toolName]) {
+                    setSelectedAdvancedTool(null); setScanMode(false); setActiveConversion(null);
+                    setInlineTool(inlineKinds[toolName] ? { type: 'pdf', kind: inlineKinds[toolName] } : { type: otherInline[toolName] });
+                    setPage('Convert');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                  }
+                  if (goesToPage[toolName]) { setPage(goesToPage[toolName]); return; }
+                  if (toolName === 'vertex ai assistant') { setChatOpen(true); return; }
+                }
                 if (conversion) {
                   setSelectedAdvancedTool(null);
                   chooseConversion(conversion);
@@ -4058,7 +4319,6 @@ export default function App() {
   }
 
   function renderPage() {
-    if (isBlankDoc) return <BlankPdfEditor onClose={() => setIsBlankDoc(false)} />;
     switch (page) {
       case 'Home / Workspace':
         return (
@@ -4104,7 +4364,12 @@ export default function App() {
       case 'Convert':
         return renderTools();
       case 'Templates':
-        return renderTemplates();
+        return (
+          <section className="page-section">
+            <PageHeading eyebrow="TEMPLATES" title="Start from a professional template" subtitle="Pick a design, edit it right on the page, then save it as PDF or Word. Resumes include a live ATS score." />
+            <TemplateStudio token={token ?? ''} userName={user?.name ?? ''} userEmail={user?.email ?? ''} />
+          </section>
+        );
       case 'Document History':
         return renderDocumentHistory();
       case 'Admin Dashboard':
@@ -4142,6 +4407,11 @@ export default function App() {
                     </select>
                   </label>
                 </div>
+                <div className="vx-lang-check">
+                  <button type="button" disabled={languageCheck.busy} onClick={() => void checkLanguageAvailability()}>{languageCheck.busy ? 'Checking…' : 'Check language availability'}</button>
+                  {languageCheck.message && <small role="status">{languageCheck.message}</small>}
+                  {languageCheck.items.length > 0 && <ul>{languageCheck.items.map((item) => <li key={item.code} className={item.status}><b>{item.name}</b> <span>{item.status === 'available' ? 'Available' : item.status === 'unverified' ? 'Not verified' : 'Not reliable'}</span><small>{item.detail}</small></li>)}</ul>}
+                </div>
               </section>
 
               <div className="language-bridge-output-row">
@@ -4166,6 +4436,7 @@ export default function App() {
                 <button type="button" className="language-bridge-primary-action" disabled={translationBusy || translationExtractBusy || (!translationText.trim() && !translationFile)} onClick={() => void runTranslation()}>
                   {translationBusy ? 'Translating…' : `Translate to ${languages.find(([code]) => code === translationTarget)?.[1] ?? 'target language'}`} <ArrowLeftRight size={15} />
                 </button>
+                {(translationBusy || translationExtractBusy || (!translationText.trim() && !translationFile)) && <small className="language-bridge-hint" role="status">{translationBusy ? 'Translating — larger documents can take a little while.' : translationExtractBusy ? 'Reading your file…' : !token ? 'Sign in, then type or upload something to translate.' : 'Type or paste some text, or upload a file, to enable Translate.'}</small>}
                 <button type="button" className="language-bridge-primary-action" disabled={translationBusy || !translationResult.trim() || (translationSource === 'auto' && !detectBridgeLanguage(translationText))} onClick={() => void runTranslation(translationResult, translationTarget, translationSource === 'auto' ? detectBridgeLanguage(translationText) ?? 'auto' : translationSource, true)}>
                   Translate edited version back to {languages.find(([code]) => code === translationSource)?.[1] ?? 'source language'} <ArrowLeftRight size={15} />
                 </button>
@@ -4308,8 +4579,8 @@ export default function App() {
               <section className="panel settings-option-card">
                 <span className="settings-option-icon"><Settings2 size={20} /></span>
                 <h2>Theme</h2>
-                <p>Choose your workspace colour palette, light or dark mode, and assistant companion.</p>
-                <small>Current theme: {palettes.find((item) => item.id === paletteId)?.name ?? paletteId} · {themeMode}</small>
+                <p>Choose your workspace colour theme and assistant companion.</p>
+                <small>Current theme: {themeDef(theme).name}</small>
                 <button onClick={() => setPage('Companion & Themes')}>Choose theme <ChevronDown size={15} /></button>
               </section>
               <section className="panel settings-option-card">
@@ -4381,22 +4652,28 @@ export default function App() {
                 {!user && <p className="inline-hint">Your choice is saved on this device. Sign in to sync it to your account.</p>}
               </section>
               <section className="panel themes-panel">
-                <div className="section-title"><div><h2>Workspace colours</h2><p>Pick a real-world palette, then choose its light or dark look.</p></div></div>
-                <div className="theme-mode-switch" role="group" aria-label="Theme brightness">
-                  {(['light', 'dark'] as const).map((mode) => (
-                    <button className={themeMode === mode ? 'active' : ''} key={mode} onClick={() => void savePreferences({ theme: `${paletteId}-${mode}` as ThemeName })}>
-                      {mode === 'light' ? <Sun size={15} /> : <Moon size={15} />}{mode === 'light' ? 'Light' : 'Dark'}
-                    </button>
+                <div className="section-title"><div><h2>Workspace colours</h2><p>Pick a colour theme. It changes accents, buttons and backgrounds instantly.</p></div></div>
+                <div className="theme-groups">
+                  {(['gradient', 'solid'] as const).map((group) => (
+                    <div key={group}>
+                      <h3 className="theme-group-title">{group === 'gradient' ? 'Gradient themes' : 'Solid themes'}</h3>
+                      <div className="theme-grid">
+                        {themes.filter((item) => item.group === group).map((item) => (
+                          <button className={`theme-tile ${theme === item.id ? 'selected' : ''}`} key={item.id} aria-pressed={theme === item.id} onClick={() => void savePreferences({ theme: item.id })}>
+                            <span className="theme-chip" style={{ background: group === 'gradient' ? `linear-gradient(135deg, ${item.a}, ${item.b})` : item.a }} />
+                            <b>{item.name}</b>
+                            {theme === item.id && <Check className="tile-check" size={16} />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </div>
-                <div className="theme-list">
-                  {palettes.map((item) => (
-                    <button className={`theme-option ${paletteId === item.id ? 'selected' : ''}`} key={item.id} onClick={() => void savePreferences({ theme: `${item.id}-${themeMode}` as ThemeName })}>
-                      <span className="theme-swatch"><i style={{ backgroundColor: item.light }} /><i style={{ backgroundColor: item.dark }} /></span>
-                      <span className="theme-name"><b>{item.name}</b><small>Soft light and balanced dark</small></span>
-                      {paletteId === item.id && <Check size={17} />}
-                    </button>
-                  ))}
+                  <div className="theme-custom">
+                    <b>Custom colours</b>
+                    <label>Main <input type="color" aria-label="Custom main colour" value={customColours.a} onChange={(event) => { const next = { ...customColours, a: event.target.value }; setCustomColours(next); saveCustomColours(next); void savePreferences({ theme: CUSTOM_THEME }); }} /></label>
+                    <label>Second <input type="color" aria-label="Custom second colour" value={customColours.b} onChange={(event) => { const next = { ...customColours, b: event.target.value }; setCustomColours(next); saveCustomColours(next); void savePreferences({ theme: CUSTOM_THEME }); }} /></label>
+                    <button className={theme === CUSTOM_THEME ? 'active' : ''} onClick={() => void savePreferences({ theme: CUSTOM_THEME })}>Use custom</button>
+                  </div>
                 </div>
                 <p className="theme-confirmation">{notice || 'Your selection updates the workspace immediately.'}</p>
               </section>
@@ -4500,7 +4777,6 @@ export default function App() {
               <section className="about-jm-contact">
                 <div><span className="eyebrow">GET IN TOUCH</span><h2>Contact JM Vertex Technologies</h2><p>Monday–Saturday, 9:00 AM–6:00 PM · Sunday closed</p></div>
                 <div className="about-jm-contact-links">
-                  <a href="mailto:info@jmvertextechnologies.com"><b>General Company Queries</b><span>info@jmvertextechnologies.com</span><small>General doubts, company-related questions, policies, procedures and common queries.</small></a>
                   <a href="mailto:jmvertextechnologies2025@gmail.com"><b>Email</b><span>jmvertextechnologies2025@gmail.com</span></a>
                   <a href="tel:+919092737477"><b>Phone</b><span>+91 90927 37477</span></a>
                   <a href="tel:+919345699376"><b>Phone</b><span>+91 93456 99376</span></a>
@@ -4523,7 +4799,7 @@ export default function App() {
         <button className="icon-button menu-button" aria-label="Toggle navigation" onClick={() => setSidebarOpen((open) => !open)}><Menu size={19} /></button>
         <button className="brand" onClick={() => setPage('Home / Workspace')}><span className="brand-mark"><img src="/jm-logo.png" alt="JM logo" /></span><span><b>Vertex Docs</b><small>JM Vertex Technologies</small></span></button>
         <div className="top-actions">
-          <button className="icon-button" aria-label="Appearance settings" onClick={() => setPage('Companion & Themes')}>{themeMode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <button className="icon-button" aria-label="Appearance settings" onClick={() => setPage('Companion & Themes')}><Palette size={18} /></button>
           <NotificationBell token={token} refreshKey={historyTick} onOpen={openNotification} />
           {user ? (
             <button className="profile-button" onClick={() => setPage('Account / Privacy')}><span>{user.name.slice(0, 1).toUpperCase()}</span><b>{user.name}</b><ChevronDown size={15} /></button>
@@ -4548,6 +4824,7 @@ export default function App() {
         </aside>
         <main className="main-content">
           {renderPage()}
+          {backendProblem && <div className="notice backend-problem" role="alert"><span><b>Backend not connected.</b> {backendProblem}</span></div>}
           {notice && !settingsPages.includes(page) && <Notice message={notice} onClose={() => setNotice('')} />}
         </main>
       </div>

@@ -10,7 +10,7 @@ class User(Base):
     name:Mapped[str]=mapped_column(String(120))
     email:Mapped[str]=mapped_column(String(255),unique=True,index=True)
     password_hash:Mapped[str|None]=mapped_column(String(255),nullable=True)
-    theme:Mapped[str]=mapped_column(String(24),default="forest-light")
+    theme:Mapped[str]=mapped_column(String(24),default="violet")
     language:Mapped[str]=mapped_column(String(20),default="en")
     avatar:Mapped[str]=mapped_column(String(80),default="pip")
     # Nullable during phased Supabase Auth rollout; existing integer IDs remain

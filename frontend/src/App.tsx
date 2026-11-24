@@ -841,7 +841,7 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
     let active = true;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       if (session?.access_token) {
         localStorage.removeItem('vd-token');
         setToken(session.access_token);
@@ -849,7 +849,7 @@ export default function App() {
         setToken('');
       }
     });
-    void supabase.auth.getSession().then(({ data }) => {
+    void supabase.auth.getSession().then(({ data }: any) => {
       if (active && data.session?.access_token) {
         localStorage.removeItem('vd-token');
         setToken(data.session.access_token);

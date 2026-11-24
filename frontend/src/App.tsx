@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlignCenter, AlignLeft, AlignRight, ArrowLeftRight, Bell, Check, ChevronDown, CircleAlert, Combine,
@@ -15,10 +16,58 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 type PaletteId = (typeof palettes)[number]['id'];
 type ThemeName = `${PaletteId}-${'light' | 'dark'}`;
+=======
+import { PointerEvent as ReactPointerEvent, SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlignCenter, AlignLeft, AlignRight, AlignJustify, ArrowLeftRight, Check, ChevronDown, CircleAlert, Combine,
+  Copy, Crop, Download, Eraser, FilePlus2, FileSearch, FileText, Highlighter, ImagePlus, Languages, LayoutDashboard, LogOut,
+  Menu, Moon, Search, Send, Settings2, ShieldCheck, Sparkles, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Indent, Outdent, RemoveFormatting,
+  Sun, Trash2, UploadCloud, X, Scissors, RotateCw, LockKeyhole, Pencil, Pen, Redo2, Save, Undo2,
+  Mic, Volume2, BookOpen, MessageCircle, ArrowDownToLine, RefreshCw, UserRound,
+  Users, Eye, FolderOpen, Share2, SquarePen, Palette,
+} from 'lucide-react';
+import { companions, conversionTools, groups, languages, palettes, tools, type ConversionTool } from './catalogue';
+import { applyTheme, CUSTOM_THEME, readCustomColours, saveCustomColours, themeDef, themeFrom, themes } from './themes';
+import { VertexAssistant } from './features/assistant/VertexAssistant';
+import { AiDocChat } from './features/ai-intelligence/AiDocChat';
+import { supabase } from './lib/supabase';
+import { apiJson, formatWhen } from './lib/api';
+import { ExportMenu } from './features/export/ExportMenu';
+import { NotificationBell, type AppNotification } from './features/notifications/NotificationBell';
+import { ShareDialog } from './features/sharing/ShareDialog';
+import { SignatureRequestPanel } from './features/signature/SignatureRequestPanel';
+import { SignaturePage } from './features/signature/SignaturePage';
+import { OcrPanel } from './features/ocr/OcrPanel';
+import { ActivityList } from './features/history/ActivityList';
+import { DocumentPreview } from './features/documents/DocumentPreview';
+import { PdfAnnotator } from './features/annotator/PdfAnnotator';
+import './features/additions.css';
+import { InlinePdfTools, type InlineKind } from './features/convert/InlinePdfTools';
+import { InlineSummarizer } from './features/convert/InlineSummarizer';
+import { InlineEditPdf } from './features/convert/InlineEditPdf';
+import { DocumentEditor } from './features/convert/DocumentEditor';
+import { TemplateStudio } from './features/templates/TemplateStudio';
+import { EditorToolbar } from './features/pdf-studio/EditorToolbar';
+import { applyBlockCss, applyListStyle, clickAndType, ensureBlocks, EDITOR_CSS, tableHtml, transformCase, type ListStyleOption } from './features/pdf-studio/richText';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const AI_READABLE_EXTENSIONS = [
+  'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'html', 'htm', 'txt', 'md', 'rtf',
+  'hwp', 'zip', 'odt', 'ods', 'odp', 'pages', 'csv', 'epub', 'jpg', 'jpeg', 'png', 'webp',
+];
+const AI_READABLE_ACCEPT = [...AI_READABLE_EXTENSIONS.map((extension) => `.${extension}`), 'application/pdf', 'image/png', 'image/jpeg', 'image/webp'].join(',');
+
+type ThemeName = string;
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 type TemplateAccent = 'forest' | 'rose' | 'graphite' | 'cocoa' | 'amber' | 'ocean';
 type EditorTool = 'text' | 'highlight' | 'pen' | 'pencil' | 'eraser';
 type ExportFormat = 'pdf' | 'docx' | 'txt';
 type ImagePosition = { x: number; y: number };
+<<<<<<< HEAD
+=======
+type ImageSize = { width: number; height: number };
+type ImageResizeSession = { handle: string; startX: number; startY: number; left: number; top: number; width: number; height: number; aspect: number; pageWidth: number; pageHeight: number };
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 type User = {
   id: number;
   name: string;
@@ -31,17 +80,73 @@ type DocumentItem = { id: number; name: string; size: number };
 type RecentUpload = { document: DocumentItem; file: File };
 type ProcessedPdf = { file: File; url: string };
 type EditorSnapshot = { text: string; drawing: string; hasDrawing: boolean };
+<<<<<<< HEAD
 type ScanPage = { id: string; file: File; preview: string; rotation: number };
 type ChatMessage = { role: 'user' | 'assistant'; text: string };
 type ChatConversation = { id: number; title: string; updated_at: string };
+=======
+
+function editorPlainText(html: string) {
+  const node = document.createElement('div');
+  node.innerHTML = html;
+  return node.innerText || node.textContent || '';
+}
+
+async function drawRichText(context: CanvasRenderingContext2D, html: string, width: number, height: number, screen?: { w: number; h: number }) {
+  if (!editorPlainText(html).trim() && !/<(img|table|hr)/i.test(html)) return;
+  // Lay the text out at the on-screen page size so the exported page matches what you see, then scale up.
+  const sw = Math.max(200, Math.round(screen?.w ?? 470));
+  const sh = Math.max(200, Math.round(screen?.h ?? (470 * height) / width));
+  const holder = document.createElement('div');
+  holder.innerHTML = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<iframe[\s\S]*?<\/iframe>/gi, '');
+  const body = new XMLSerializer().serializeToString(holder); // well-formed XHTML (closes <br>, escapes entities)
+  const markup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${sw} ${sh}"><foreignObject width="${sw}" height="${sh}"><div xmlns="http://www.w3.org/1999/xhtml" class="vd-rich" style="box-sizing:border-box;width:${sw}px;height:${sh}px;padding:${sh * .09}px ${sw * .09}px ${sh * .08}px;color:#262b28;background:transparent;font:14px/1.65 'Segoe UI',Arial,sans-serif;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere"><style>${EDITOR_CSS.replace(/</g, '&lt;')}</style>${body.replace(/^<div[^>]*>|<\/div>$/g, '')}</div></foreignObject></svg>`;
+  const image = new Image();
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+  await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Formatted text could not be rendered.')); });
+  context.drawImage(image, 0, 0, width, height);
+}
+type ScanPage = { id: string; file: File; preview: string; rotation: number };
+type ChatMessage = { role: 'user' | 'assistant'; text: string };
+type ChatConversation = { id: number; title: string; updated_at: string };
+type AdminStats = {
+  total_users: number;
+  total_documents: number;
+  total_pdf_operations: number;
+  total_translations: number;
+  total_ai_usage: number;
+  historical_activity_limited: boolean;
+  historical_activity_note: string;
+};
+type AdminActivity = {
+  id: number;
+  user_id: number;
+  user_email?: string;
+  action: string;
+  entity_type: string;
+  created_at: string;
+};
+type AdminUser = { id: number; email: string };
+type AdminPage<T> = { items: T[]; limit: number; offset: number; total: number; user_id?: number };
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 type PageName =
   | 'Home / Workspace'
   | 'PDF Studio'
   | 'Convert'
   | 'Language Bridge'
+<<<<<<< HEAD
   | 'AI Documents'
   | 'Templates'
   | 'Document History'
+=======
+  | 'Humanizer'
+  | 'AI Documents'
+  | 'Templates'
+  | 'Document History'
+  | 'Settings'
+  | 'About JM Vertex'
+  | 'Admin Dashboard'
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   | 'Account / Privacy'
   | 'Companion & Themes';
 type PdfAction =
@@ -102,6 +207,38 @@ const speechLocales: Record<string, string> = {
   bn: 'bn-IN', fr: 'fr-FR', es: 'es-ES',
 };
 
+<<<<<<< HEAD
+=======
+function detectBridgeLanguage(text: string) {
+  const scriptRanges: Record<string, [number, number]> = {
+    ta: [0x0b80, 0x0bff],
+    hi: [0x0900, 0x097f],
+    bn: [0x0980, 0x09ff],
+    ml: [0x0d00, 0x0d7f],
+    te: [0x0c00, 0x0c7f],
+    kn: [0x0c80, 0x0cff],
+  };
+  const counts = Object.fromEntries(Object.keys(scriptRanges).map((code) => [code, 0])) as Record<string, number>;
+  let latinCount = 0;
+  for (const character of text) {
+    if (!character.match(/\p{L}/u)) continue;
+    const point = character.codePointAt(0) ?? 0;
+    const script = Object.entries(scriptRanges).find(([, [start, end]]) => point >= start && point <= end);
+    if (script) counts[script[0]] += 1;
+    else if (point <= 0x024f || (point >= 0x1e00 && point <= 0x1eff)) latinCount += 1;
+  }
+  const [indicCode, indicCount] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? ['ta', 0];
+  if (indicCount >= 3 && indicCount >= latinCount) return indicCode;
+  if (latinCount >= 3) return 'en';
+  return null;
+}
+
+function countWords(text: string) {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/u).length : 0;
+}
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 const templateCatalog: { id: TemplateKind; name: string; category: string; description: string }[] = [
   { id: 'resume', name: 'Resume', category: 'Career', description: 'A clear, polished layout for your experience and skills.' },
   { id: 'cover-letter', name: 'Cover letter', category: 'Career', description: 'Introduce yourself with a focused, professional letter.' },
@@ -183,10 +320,17 @@ const navItems = [
   { name: 'Language Bridge' as const, label: 'Language Bridge', icon: Languages },
   { name: 'Convert' as const, label: 'Convert', icon: ArrowLeftRight },
   { name: 'AI Documents' as const, label: 'AI Documents', icon: Sparkles },
+<<<<<<< HEAD
   { name: 'Templates' as const, label: 'Templates', icon: LayerIcon },
   { name: 'Document History' as const, label: 'Document History', icon: FileSearch },
   { name: 'Account / Privacy' as const, label: 'Account / Privacy', icon: ShieldCheck },
   { name: 'Companion & Themes' as const, label: 'Companion & Themes', icon: Settings2 },
+=======
+  { name: 'Humanizer' as const, label: 'Humanizer', icon: Pencil },
+  { name: 'Templates' as const, label: 'Templates', icon: LayerIcon },
+  { name: 'Document History' as const, label: 'Document History', icon: FileSearch },
+  { name: 'Settings' as const, label: 'Settings', icon: Settings2 },
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 ];
 
 const pdfActions: { id: PdfAction; name: string; description: string; icon: typeof FileText }[] = [
@@ -230,8 +374,14 @@ const advancedToolConfigs: Record<string, AdvancedToolConfig> = {
   'resize pdf': { slug: 'resize-pdf', description: 'Scale each page to a standard paper size while preserving proportions.', fields: [{ key: 'paper', label: 'Paper size', type: 'select', defaultValue: 'A4', options: ['A4', 'A3', 'Letter', 'Legal'] }] },
   'remove annotations': { slug: 'remove-annotations', description: 'Remove PDF annotations and comments from all pages.' },
   'deskew pdf': { slug: 'deskew-pdf', description: 'Estimate and correct small scan rotations. Pages are rasterized and text is no longer searchable.', fields: [{ key: 'dpi', label: 'Render quality (DPI)', type: 'number', defaultValue: '144' }] },
+<<<<<<< HEAD
   'ocr pdf': { mode: 'provider-required', description: 'OCR provider endpoint and credentials are not configured. Configure the selected OCR API before enabling this operation.' },
   'request signature': { mode: 'provider-required', description: 'Email/e-sign provider details are not configured. Configure a provider before sending signature requests.' },
+=======
+  'ocr pdf': { description: 'Read text from scanned PDFs and images with the local Tesseract OCR engine.' },
+  'request signature': { description: 'Send a PDF to someone for a typed signature and track the request.' },
+  'pdf annotator': { description: 'Highlight, draw, write and save annotations on a PDF in your workspace.' },
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   'ai question generator': { mode: 'ai', description: 'Generate study questions and an answer key from an uploaded PDF, DOCX, TXT, or Markdown file.', fields: [{ key: 'count', label: 'Question count', type: 'number', defaultValue: '5' }, { key: 'language', label: 'Language', type: 'select', defaultValue: 'en', options: ['en', 'ta', 'hi', 'ml', 'te', 'kn', 'ja', 'de', 'sa', 'bn', 'fr', 'es', 'tanglish'] }] },
 };
 
@@ -239,6 +389,7 @@ function LayerIcon({ size = 20 }: { size?: number }) {
   return <span aria-hidden="true" className="layers-icon" style={{ width: size, height: size }}>▦</span>;
 }
 
+<<<<<<< HEAD
 function themeFrom(value: string | null | undefined): ThemeName {
   if (palettes.some((palette) => value === `${palette.id}-light` || value === `${palette.id}-dark`)) return value as ThemeName;
   const legacyThemes: Record<string, ThemeName> = {
@@ -259,6 +410,8 @@ function themeFrom(value: string | null | undefined): ThemeName {
   return 'forest-light';
 }
 
+=======
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 function companionFrom(value: string | null | undefined) {
   return companions.find((companion) => companion.id === value)
     ?? companions.find((companion) => companion.id === 'pip')
@@ -276,6 +429,24 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+<<<<<<< HEAD
+=======
+function formatAdminTimestamp(value: string) {
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
+  const date = new Date(hasTimezone ? value : `${value}Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
+}
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 function readImageData(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -359,12 +530,49 @@ export default function App() {
   const [avatar, setAvatar] = useState(() => companionFrom(localStorage.getItem('vd-avatar')).id);
   const [language, setLanguage] = useState(localStorage.getItem('vd-language') || 'en');
   const [token, setToken] = useState(localStorage.getItem('vd-token') || '');
+<<<<<<< HEAD
   const [user, setUser] = useState<User | null>(null);
+=======
+  const [authResolving, setAuthResolving] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [adminAccess, setAdminAccess] = useState<'checking' | 'allowed' | 'denied' | 'unavailable' | 'signed-out'>('checking');
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [adminActivityPage, setAdminActivityPage] = useState<AdminPage<AdminActivity> | null>(null);
+  const [adminUsersPage, setAdminUsersPage] = useState<AdminPage<AdminUser> | null>(null);
+  const [selectedAdminUser, setSelectedAdminUser] = useState<AdminUser | null>(null);
+  const [adminUserActivityPage, setAdminUserActivityPage] = useState<AdminPage<AdminActivity> | null>(null);
+  const [adminActivityOffset, setAdminActivityOffset] = useState(0);
+  const [adminUsersOffset, setAdminUsersOffset] = useState(0);
+  const [adminUserActivityOffset, setAdminUserActivityOffset] = useState(0);
+  const [adminRefreshVersion, setAdminRefreshVersion] = useState(0);
+  const [adminStatsError, setAdminStatsError] = useState('');
+  const [adminDataError, setAdminDataError] = useState('');
+  const [adminDataBusy, setAdminDataBusy] = useState(false);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState('');
+<<<<<<< HEAD
+=======
+  const [backendProblem, setBackendProblem] = useState('');
+
+  // Make a wrong VITE_API_URL (for example the translation service port 8001) obvious instead of silently failing.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8000);
+    fetch(`${API}/api/health`, { signal: controller.signal })
+      .then(async (response) => {
+        const body = response.ok ? await response.json().catch(() => null) : null;
+        if (!cancelled) setBackendProblem(body?.service === 'Vertex Docs API' ? '' : `The app reached ${API}, but that is not the Vertex Docs backend. Set VITE_API_URL=http://localhost:8000 in frontend/.env (8001 is the translation service) and restart npm run dev.`);
+      })
+      .catch(() => { if (!cancelled) setBackendProblem(`Cannot reach the Vertex Docs backend at ${API}. Start it (port 8000) and check VITE_API_URL in frontend/.env.`); })
+      .finally(() => window.clearTimeout(timer));
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(timer); };
+  }, []);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All tools');
   const [activeConversion, setActiveConversion] = useState<ConversionTool | null>(null);
@@ -387,6 +595,11 @@ export default function App() {
   const [advancedNotice, setAdvancedNotice] = useState('');
   const [advancedOutput, setAdvancedOutput] = useState<ProcessedPdf | null>(null);
   const [advancedTextOutput, setAdvancedTextOutput] = useState('');
+<<<<<<< HEAD
+=======
+  const [isBlankDoc, setIsBlankDoc] = useState(false);
+  const [inlineTool, setInlineTool] = useState<{ type: 'pdf'; kind: InlineKind } | { type: 'summarize' | 'edit' | 'doc' } | null>(null);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [recentUpload, setRecentUpload] = useState<RecentUpload | null>(null);
@@ -401,7 +614,11 @@ export default function App() {
   const [chatAttachment, setChatAttachment] = useState<File | null>(null);
   const [chatAttachmentError, setChatAttachmentError] = useState('');
   const [chatConversionOutput, setChatConversionOutput] = useState<ProcessedPdf | null>(null);
+<<<<<<< HEAD
   const [chatConversionFormat, setChatConversionFormat] = useState<ExportFormat>('pdf');
+=======
+  const [chatConversionName, setChatConversionName] = useState<string>(conversionTools[0].name);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const [chatConversionBusy, setChatConversionBusy] = useState(false);
   const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [aiDocMode, setAiDocMode] = useState<'summary' | 'chat' | 'translate'>('summary');
@@ -423,6 +640,17 @@ export default function App() {
   const [historyQuery, setHistoryQuery] = useState('');
   const [historyFilter, setHistoryFilter] = useState<'all' | 'pdf' | 'word' | 'text'>('all');
   const [historySort, setHistorySort] = useState<'name' | 'largest'>('name');
+<<<<<<< HEAD
+=======
+  type HistoryDoc = { id: number; uploaded_at: string | null; last_action: string | null; last_action_at: string | null; operation_count: number; active_shares: number; signature_status: string | null };
+  const [historyDocs, setHistoryDocs] = useState<Record<number, HistoryDoc>>({});
+  const [historyTick, setHistoryTick] = useState(0);
+  const [shareTarget, setShareTarget] = useState<DocumentItem | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<DocumentItem | null>(null);
+  const [annotateTarget, setAnnotateTarget] = useState<DocumentItem | null>(null);
+  const [languageCheck, setLanguageCheck] = useState<{ busy: boolean; message: string; items: { code: string; name: string; status: string; detail: string }[] }>({ busy: false, message: '', items: [] });
+  const signToken = useMemo(() => new URLSearchParams(window.location.search).get('sign'), []);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const [pdfAction, setPdfAction] = useState<PdfAction>('info');
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
@@ -448,6 +676,10 @@ export default function App() {
   const [editorImageName, setEditorImageName] = useState('');
   const [editorImageSelected, setEditorImageSelected] = useState(false);
   const [editorImagePosition, setEditorImagePosition] = useState<ImagePosition>({ x: 50, y: 62 });
+<<<<<<< HEAD
+=======
+  const [editorImageSize, setEditorImageSize] = useState<ImageSize>({ width: 32, height: 24 });
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const [editorImageRotation, setEditorImageRotation] = useState(0);
   const [editorCropLeft, setEditorCropLeft] = useState(0);
   const [editorCropRight, setEditorCropRight] = useState(0);
@@ -473,6 +705,7 @@ export default function App() {
   const scanFileInputRef = useRef<HTMLInputElement | null>(null);
   const imageFileInputRef = useRef<HTMLInputElement | null>(null);
   const editorPageRef = useRef<HTMLDivElement | null>(null);
+<<<<<<< HEAD
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageDragOffset = useRef<ImagePosition | null>(null);
   const drawingPointer = useRef(false);
@@ -483,6 +716,41 @@ export default function App() {
   const [translationResult, setTranslationResult] = useState('');
   const [translationOutput, setTranslationOutput] = useState<ProcessedPdf | null>(null);
   const [translationSaveBusy, setTranslationSaveBusy] = useState(false);
+=======
+  const editorTextRef = useRef<HTMLDivElement | null>(null);
+  const editorSelectionRef = useRef<Range | null>(null);
+  const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imageDragOffset = useRef<ImagePosition | null>(null);
+  const imageResizeSession = useRef<ImageResizeSession | null>(null);
+  const drawingPointer = useRef(false);
+  const [translationText, setTranslationText] = useState('');
+  const [translationSource, setTranslationSource] = useState('auto');
+  const [translationSourceLocked, setTranslationSourceLocked] = useState(false);
+  const [translationTarget, setTranslationTarget] = useState('en');
+  const [translationFile, setTranslationFile] = useState<File | null>(null);
+  const [translationExtractBusy, setTranslationExtractBusy] = useState(false);
+  const translationFileLoadId = useRef(0);
+  const [translationResult, setTranslationResult] = useState('');
+  const [translationRevised, setTranslationRevised] = useState('');
+  const [translationOutput, setTranslationOutput] = useState<ProcessedPdf | null>(null);
+  const [translationSaveBusy, setTranslationSaveBusy] = useState(false);
+  const [humanizerInput, setHumanizerInput] = useState('');
+  const [humanizerOutput, setHumanizerOutput] = useState('');
+  const [humanizerBusy, setHumanizerBusy] = useState(false);
+  const [humanizerError, setHumanizerError] = useState('');
+  const [humanizerNotice, setHumanizerNotice] = useState('');
+  const [humanizerWritingStyle, setHumanizerWritingStyle] = useState<'simple' | 'professional' | 'conversational' | 'academic'>('simple');
+  const [humanizerStrength, setHumanizerStrength] = useState(3);
+  const [humanizerFile, setHumanizerFile] = useState<File | null>(null);
+  const [humanizerFileBusy, setHumanizerFileBusy] = useState(false);
+  const [humanizerDownloadFormat, setHumanizerDownloadFormat] = useState<'txt' | 'docx' | 'pdf'>('txt');
+  const humanizerFileRequestId = useRef(0);
+
+  useEffect(() => {
+    const editor = editorTextRef.current;
+    if (editor && editor.innerHTML !== editorText) editor.innerHTML = editorText;
+  }, [editorText]);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   const [translationMessage, setTranslationMessage] = useState('');
   const [translationBusy, setTranslationBusy] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateKind | null>(null);
@@ -495,6 +763,7 @@ export default function App() {
   const [templateBusy, setTemplateBusy] = useState(false);
 
   const companion = companionFrom(avatar);
+<<<<<<< HEAD
   const themeMode: 'light' | 'dark' = theme.endsWith('-dark') ? 'dark' : 'light';
   const paletteId = theme.slice(0, -(themeMode.length + 1)) as PaletteId;
 
@@ -502,6 +771,112 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('vd-theme', theme);
   }, [theme]);
+=======
+  const [customColours, setCustomColours] = useState(readCustomColours);
+
+  const adminFetch = useCallback(async <T,>(path: string): Promise<T> => {
+    const response = await fetch(`${API}/api/admin/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const error = new Error(await responseError(response)) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
+    }
+    return await response.json() as T;
+  }, [token]);
+
+  const expireAdminSession = useCallback(() => {
+    if (supabase) void supabase.auth.signOut();
+    localStorage.removeItem('vd-token');
+    setToken('');
+    setUser(null);
+    setAdminAccess('signed-out');
+    setAdminStats(null);
+    setAdminActivityPage(null);
+    setAdminUsersPage(null);
+    setSelectedAdminUser(null);
+    setAdminUserActivityPage(null);
+    setPage('Account / Privacy');
+  }, []);
+
+  function handleAdminRequestError(error: unknown) {
+    const status = error instanceof Error ? (error as Error & { status?: number }).status : undefined;
+    if (status === 401) {
+      expireAdminSession();
+      return;
+    }
+    if (status === 403) {
+      setAdminAccess('denied');
+      return;
+    }
+    setAdminDataError(error instanceof Error ? error.message : 'Could not load administrator data.');
+  }
+
+  useEffect(() => {
+    if (!token) {
+      setAdminAccess('signed-out');
+      setAdminStats(null);
+      return;
+    }
+    let active = true;
+    setAdminAccess((current) => current === 'allowed' ? 'allowed' : 'checking');
+    setAdminStatsError('');
+    adminFetch<AdminStats>('stats')
+      .then((stats) => {
+        if (!active) return;
+        setAdminStats(stats);
+        setAdminAccess('allowed');
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const status = error instanceof Error ? (error as Error & { status?: number }).status : undefined;
+        if (status === 401) {
+          expireAdminSession();
+        } else if (status === 403) {
+          setAdminAccess('denied');
+          setAdminStats(null);
+        } else {
+          setAdminAccess((current) => current === 'allowed' ? 'allowed' : 'unavailable');
+          setAdminStatsError(error instanceof Error ? error.message : 'Could not verify administrator access.');
+        }
+      });
+    return () => { active = false; };
+  }, [token, adminFetch, adminRefreshVersion, expireAdminSession]);
+
+  useEffect(() => {
+    if (adminAccess !== 'allowed' || !token) return;
+    let active = true;
+    setAdminDataBusy(true);
+    setAdminDataError('');
+    const activityPath = `activity?limit=10&offset=${adminActivityOffset}`;
+    const usersPath = `users?limit=10&offset=${adminUsersOffset}`;
+    const historyRequest = selectedAdminUser
+      ? adminFetch<AdminPage<AdminActivity>>(`users/${selectedAdminUser.id}/activity?limit=10&offset=${adminUserActivityOffset}`)
+      : Promise.resolve(null);
+    Promise.all([
+      adminFetch<AdminPage<AdminActivity>>(activityPath),
+      adminFetch<AdminPage<AdminUser>>(usersPath),
+      historyRequest,
+    ]).then(([activity, users, history]) => {
+      if (!active) return;
+      setAdminActivityPage(activity);
+      setAdminUsersPage(users);
+      setAdminUserActivityPage(history);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      handleAdminRequestError(error);
+    }).finally(() => {
+      if (active) setAdminDataBusy(false);
+    });
+    return () => { active = false; };
+  }, [adminAccess, token, adminFetch, adminActivityOffset, adminUsersOffset, selectedAdminUser, adminUserActivityOffset, adminRefreshVersion]);
+
+  useEffect(() => {
+    applyTheme(theme);
+    localStorage.setItem('vd-theme', theme);
+  }, [theme, customColours]);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
   useEffect(() => {
     localStorage.setItem('vd-avatar', avatar);
@@ -583,7 +958,34 @@ export default function App() {
   }, [editorPdfFile, pdfPageDimensions]);
 
   useEffect(() => {
+<<<<<<< HEAD
     if (!token) return;
+=======
+    if (!supabase) return;
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.access_token) {
+        localStorage.removeItem('vd-token');
+        setToken(session.access_token);
+      } else if (event === 'SIGNED_OUT') {
+        setToken('');
+      }
+    });
+    void supabase.auth.getSession().then(({ data }) => {
+      if (active && data.session?.access_token) {
+        localStorage.removeItem('vd-token');
+        setToken(data.session.access_token);
+      }
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token || authResolving) return;
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error(await responseError(response));
@@ -599,7 +1001,18 @@ export default function App() {
         setToken('');
         localStorage.removeItem('vd-token');
       });
+<<<<<<< HEAD
   }, [token]);
+=======
+  }, [token, authResolving]);
+
+  useEffect(() => {
+    if (!token) { setHistoryDocs({}); return; }
+    apiJson<{ items: HistoryDoc[] }>('/api/history/documents', token)
+      .then((result) => setHistoryDocs(Object.fromEntries(result.items.map((item) => [item.id, item]))))
+      .catch(() => setHistoryDocs({}));
+  }, [token, documents, historyTick]);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
   const loadDocuments = useCallback(async () => {
     if (!token) {
@@ -654,6 +1067,10 @@ export default function App() {
   }
 
   function encourageUser(message: string) {
+<<<<<<< HEAD
+=======
+    setHistoryTick((value) => value + 1);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     if (page === 'AI Documents') {
       setNotice(message);
       return;
@@ -663,9 +1080,111 @@ export default function App() {
   }
 
   async function submitAuth() {
+<<<<<<< HEAD
     try {
       const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
       const payload = authMode === 'signup' ? { name, email, password } : { email, password };
+=======
+    setAuthResolving(true);
+    try {
+      const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
+      const payload = authMode === 'signup' ? { name, email, password } : { email, password };
+      if (supabase) {
+        let accessToken = '';
+        if (authMode === 'signup') {
+          const { data, error } = await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: { data: { name: name.trim() } },
+          });
+          if (error) throw error;
+          if (!data.session?.access_token) {
+            setPassword('');
+            setNotice('Check your email to confirm your account, then sign in.');
+            return;
+          }
+          accessToken = data.session.access_token;
+        } else {
+          const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+          if (error) {
+            // Existing accounts can continue to use the legacy session until
+            // they are imported/linked in Supabase Auth.
+            const legacyResponse = await fetch(`${API}${endpoint}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (!legacyResponse.ok) throw error;
+            const legacyResult = await legacyResponse.json();
+            localStorage.setItem('vd-token', legacyResult.access_token);
+            setToken(legacyResult.access_token);
+            setUser(legacyResult.user as User);
+            setPassword('');
+            setPage('Home / Workspace');
+            setNotice('Signed in with your existing Vertex Docs session. Link your account after Supabase Auth migration.');
+            return;
+          }
+          if (!data.session?.access_token) throw new Error('Supabase did not return an active session.');
+          accessToken = data.session.access_token;
+        }
+
+        const bearerHeaders = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        };
+        let profileResponse = await fetch(`${API}/api/auth/profile`, {
+          method: 'POST',
+          headers: bearerHeaders,
+          body: JSON.stringify({ name: name.trim() || 'Vertex Docs User' }),
+        });
+        let linkedWithLegacy = false;
+        if (profileResponse.status === 409) {
+          if (authMode !== 'login') {
+            await supabase.auth.signOut();
+            throw new Error('An existing Vertex Docs account requires sign-in with its existing password to link securely.');
+          }
+          const legacyResponse = await fetch(`${API}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          });
+          if (!legacyResponse.ok) {
+            await supabase.auth.signOut();
+            throw new Error('This account needs secure linking. Sign in with the same existing password used for Vertex Docs.');
+          }
+          const legacyResult = await legacyResponse.json();
+          profileResponse = await fetch(`${API}/api/auth/link-supabase`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'X-Legacy-Token': legacyResult.access_token,
+            },
+          });
+          linkedWithLegacy = true;
+        }
+        if (!profileResponse.ok) throw new Error(await responseError(profileResponse));
+        const profile = await profileResponse.json() as User;
+        localStorage.removeItem('vd-token');
+        setAdminAccess('checking');
+        setAdminStats(null);
+        setAdminActivityPage(null);
+        setAdminUsersPage(null);
+        setSelectedAdminUser(null);
+        setAdminUserActivityPage(null);
+        setToken(accessToken);
+        setPassword('');
+        setUser(profile);
+        setTheme(themeFrom(profile.theme));
+        setAvatar(companionFrom(profile.avatar).id);
+        setLanguage(profile.language || 'en');
+        setPage('Home / Workspace');
+        setNotice(authMode === 'signup' ? 'Account created. You are signed in.' : 'You are signed in.');
+        if (authMode === 'login' && !linkedWithLegacy) {
+          void fetch(`${API}/api/auth/login-event`, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => undefined);
+        }
+        return;
+      }
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       const response = await fetch(`${API}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -674,6 +1193,15 @@ export default function App() {
       if (!response.ok) throw new Error(await responseError(response));
       const result = await response.json();
       localStorage.setItem('vd-token', result.access_token);
+<<<<<<< HEAD
+=======
+      setAdminAccess('checking');
+      setAdminStats(null);
+      setAdminActivityPage(null);
+      setAdminUsersPage(null);
+      setSelectedAdminUser(null);
+      setAdminUserActivityPage(null);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       setToken(result.access_token);
       setPassword('');
       setUser(result.user as User);
@@ -684,16 +1212,34 @@ export default function App() {
       setNotice(authMode === 'signup' ? 'Account created. You are signed in.' : 'You are signed in.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not sign in.');
+<<<<<<< HEAD
+=======
+    } finally {
+      setAuthResolving(false);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     }
   }
 
   function signOut() {
+<<<<<<< HEAD
+=======
+    if (supabase) void supabase.auth.signOut();
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     window.speechSynthesis?.cancel();
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setIsListening(false);
     setIsSpeaking(false);
     setToken('');
+<<<<<<< HEAD
+=======
+    setAdminAccess('signed-out');
+    setAdminStats(null);
+    setAdminActivityPage(null);
+    setAdminUsersPage(null);
+    setSelectedAdminUser(null);
+    setAdminUserActivityPage(null);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     setUser(null);
     setDocuments([]);
     setRecentUpload(null);
@@ -743,7 +1289,11 @@ export default function App() {
   function renderUploadNextSteps() {
     if (!recentUpload) return null;
     const extension = recentUpload.document.name.split('.').pop()?.toLowerCase() ?? '';
+<<<<<<< HEAD
     const canStudy = ['pdf', 'docx', 'txt', 'md'].includes(extension);
+=======
+    const canStudy = AI_READABLE_EXTENSIONS.includes(extension);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     const canConvert = conversionTools.some((tool) => tool.inputExtensions.includes(extension));
     const canEdit = extension === 'pdf';
     return (
@@ -769,7 +1319,11 @@ export default function App() {
             setAiDocMode('summary');
             setPage('AI Documents');
           }}>
+<<<<<<< HEAD
             <BookOpen size={19} /><b>Study with AI</b><small>{canStudy ? 'Summarize, ask questions, or translate this document.' : 'Supports PDF, DOCX, TXT, and Markdown.'}</small>
+=======
+            <BookOpen size={19} /><b>Study with AI</b><small>{canStudy ? 'Summarize, ask questions, or translate this document.' : 'Supports documents, spreadsheets, slides, ebooks, archives, and images.'}</small>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           </button>
           <button disabled={!canConvert} onClick={() => {
             setActiveConversion(null);
@@ -786,6 +1340,84 @@ export default function App() {
     );
   }
 
+<<<<<<< HEAD
+=======
+  function escapeHtml(value: string) {
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /** Open a saved document in the right place: PDFs load into PDF Studio, other formats open as editable text. */
+  async function openDocument(item: DocumentItem) {
+    if (!token) { setNotice('Sign in to open documents.'); return; }
+    try {
+      setNotice(`Opening ${item.name}…`);
+      if (item.name.toLowerCase().endsWith('.pdf')) {
+        const response = await fetch(`${API}/api/documents/${item.id}/download`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error(await responseError(response));
+        const file = new File([await response.blob()], item.name, { type: 'application/pdf' });
+        setPage('PDF Studio');
+        setPdfAction('info');
+        selectPdfFiles([file], true);
+      } else {
+        const result = await apiJson<{ text: string; truncated: boolean }>(`/api/documents/${item.id}/text`, token);
+        resetEditor();
+        setEditorText(result.text.split(/\n{2,}/).map((block) => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join(''));
+        setPage('PDF Studio');
+      }
+      setNotice('');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not open this document.');
+    }
+  }
+
+
+  /** Open a document in the OS default program */
+  async function openInExternalViewer(item: DocumentItem) {
+    if (!token) { setNotice('Sign in to open documents.'); return; }
+    try {
+      const response = await fetch(`${API}/api/documents/${item.id}/download`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error(await responseError(response));
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not open this document.');
+    }
+  }
+
+  /** Save OCR output as a workspace text file so AI Documents and other tools can use it. */
+  async function useOcrTextWithAi(text: string) {
+    if (!token || !text.trim()) return;
+    try {
+      const body = new FormData();
+      body.append('file', new File([text], 'ocr-result.txt', { type: 'text/plain' }));
+      const saved = await apiJson<DocumentItem>('/api/documents/upload', token, { method: 'POST', body });
+      await loadDocuments();
+      chooseAiDocument(String(saved.id));
+      setPage('AI Documents');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not save the OCR text.');
+    }
+  }
+
+  function openNotification(notification: AppNotification) {
+    setPage('Document History');
+    setHistoryTick((value) => value + 1);
+    if (notification.document_id) setHistoryQuery('');
+  }
+
+  async function checkLanguageAvailability() {
+    if (!token) { setTranslationMessage('Sign in to check language availability.'); return; }
+    setLanguageCheck({ busy: true, message: 'Testing each language with your AI provider. This can take a minute…', items: [] });
+    try {
+      const result = await apiJson<{ provider_configured: boolean; model: string; languages: { code: string; name: string; status: string; detail: string }[] }>('/api/translation/languages?probe=true', token);
+      setLanguageCheck({ busy: false, message: result.provider_configured ? `Model: ${result.model}` : 'No AI provider is configured.', items: result.languages });
+    } catch (error) {
+      setLanguageCheck({ busy: false, message: error instanceof Error ? error.message : 'The check failed.', items: [] });
+    }
+  }
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   async function downloadDocument(item: DocumentItem) {
     try {
       const response = await fetch(`${API}/api/documents/${item.id}/download`, {
@@ -969,14 +1601,49 @@ export default function App() {
     }
   }
 
+<<<<<<< HEAD
   async function convertChatAttachment() {
     if (!token || !chatAttachment || chatConversionBusy) return;
+=======
+  const chatAttachmentExtension = chatAttachment ? (chatAttachment.name.split('.').pop()?.toLowerCase() ?? '') : '';
+  const chatConversionTool = conversionTools.find((tool) => tool.name === chatConversionName) ?? conversionTools[0];
+  const chatConversionSupported = Boolean(chatAttachment && chatConversionTool.inputExtensions.includes(chatAttachmentExtension));
+
+  function chooseChatAttachment(file: File | null) {
+    if (!file) {
+      setChatAttachment(null);
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setChatAttachmentError('Files must be 50 MB or smaller.');
+      setChatAttachment(null);
+      return;
+    }
+    setChatAttachmentError('');
+    setChatAttachment(file);
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+    const match = conversionTools.find((tool) => tool.inputExtensions.includes(extension));
+    if (match) setChatConversionName(match.name);
+  }
+
+  async function convertChatAttachment() {
+    if (!token || !chatAttachment || chatConversionBusy || !chatConversionTool) return;
+    const extension = chatAttachment.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!chatConversionTool.inputExtensions.includes(extension)) {
+      setChatAttachmentError(`Choose a conversion that supports .${extension || 'this file type'}.`);
+      return;
+    }
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     setChatConversionBusy(true);
     setChatAttachmentError('');
     try {
       const form = new FormData();
       form.append('file', chatAttachment);
+<<<<<<< HEAD
       form.append('output_format', chatConversionFormat);
+=======
+      form.append('output_format', chatConversionTool.outputFormat);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       const response = await fetch(`${API}/api/pdf/convert`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -984,9 +1651,19 @@ export default function App() {
       });
       if (!response.ok) throw new Error(await responseError(response));
       const blob = await response.blob();
+<<<<<<< HEAD
       const file = new File([blob], `vertex-converted.${chatConversionFormat}`, { type: blob.type });
       setChatConversionOutput({ file, url: URL.createObjectURL(file) });
       setChatMessages((current) => [...current, { role: 'assistant', text: `Your ${chatConversionFormat.toUpperCase()} conversion of “${chatAttachment.name}” is ready. Download it below.` }]);
+=======
+      const outputFormat = chatConversionTool.outputFormat;
+      const fallbackExtension = outputFormat === 'jpg' || outputFormat === 'png' ? 'zip' : outputFormat === 'pdfa' ? 'pdf' : outputFormat;
+      const disposition = response.headers.get('Content-Disposition') ?? '';
+      const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
+      const file = new File([blob], filenameMatch?.[1] || `vertex-converted.${fallbackExtension}`, { type: blob.type });
+      setChatConversionOutput({ file, url: URL.createObjectURL(file) });
+      setChatMessages((current) => [...current, { role: 'assistant', text: `Your ${chatConversionTool.name} conversion of “${chatAttachment.name}” is ready. Download it below.` }]);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     } catch (error) {
       setChatAttachmentError(error instanceof Error ? error.message : 'The file could not be converted.');
     } finally {
@@ -1139,6 +1816,7 @@ export default function App() {
     setAiCompanionLine('Your translated text file is downloaded and ready to use!');
   }
 
+<<<<<<< HEAD
   async function runTranslation() {
     if (!token) {
       setTranslationResult('Sign in to use translation.');
@@ -1169,28 +1847,254 @@ export default function App() {
         headers: {
           Authorization: `Bearer ${token}`,
           ...(!translationFile ? { 'Content-Type': 'application/json' } : {}),
+=======
+  async function extractBridgeText(file: File) {
+    const requestId = ++translationFileLoadId.current;
+    if (!token) {
+      setTranslationMessage('Sign in to extract text from your document.');
+      return;
+    }
+    setTranslationExtractBusy(true);
+    setTranslationMessage('Extracting document text…');
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const response = await fetch(`${API}/api/ai/chat/attachment-text`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      const result = await response.json() as { text: string };
+      if (requestId !== translationFileLoadId.current) return;
+      setTranslationText(result.text);
+      setTranslationSource(detectBridgeLanguage(result.text) ?? 'auto');
+      setTranslationSourceLocked(false);
+      setTranslationMessage('Document text extracted. Choose a target language and translate.');
+    } catch (error) {
+      if (requestId !== translationFileLoadId.current) return;
+      setTranslationMessage(error instanceof Error ? error.message : 'Could not extract text from this document.');
+    } finally {
+      if (requestId === translationFileLoadId.current) setTranslationExtractBusy(false);
+    }
+  }
+
+  function downloadBridgeText(filename: string, text: string) {
+    if (!text.trim()) return;
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function runTranslation(textOverride?: string, sourceOverride?: string, targetOverride?: string, isRevision = false) {
+    const useFile = !isRevision && textOverride === undefined && Boolean(translationFile);
+    const sourceLanguage = sourceOverride ?? (translationSource === 'auto' ? detectBridgeLanguage(translationText) ?? 'auto' : translationSource);
+    const targetLanguage = targetOverride ?? translationTarget;
+    const text = textOverride ?? translationText.trim();
+    if (!token) {
+      setTranslationMessage('Sign in to use translation.');
+      setPage('Account / Privacy');
+      return;
+    }
+    if (!useFile && !text) {
+      setTranslationMessage('Enter text or choose a PDF, DOCX, TXT, or Markdown file.');
+      return;
+    }
+    setTranslationBusy(true);
+    setTranslationMessage('');
+    setTranslationOutput(null);
+    try {
+      const body = useFile ? new FormData() : JSON.stringify({
+        text,
+        source_language: sourceLanguage,
+        target_language: targetLanguage,
+      });
+      if (useFile && body instanceof FormData && translationFile) {
+        body.append('file', translationFile);
+        body.append('source_language', sourceLanguage);
+        body.append('target_language', targetLanguage);
+      }
+      const response = await fetch(`${API}/api/ai/${useFile ? 'translate-file' : 'translate'}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(!useFile ? { 'Content-Type': 'application/json' } : {}),
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         },
         body,
       });
       if (!response.ok) throw new Error(await responseError(response));
+<<<<<<< HEAD
       const result = await response.json() as { translation: string };
       setTranslationResult(result.translation);
       if (translationFile) {
         const baseName = translationFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '-').replace(/^-|-$/g, '') || 'document';
         const targetCode = translationTarget.replace(/[^a-zA-Z0-9-]/g, '') || 'translated';
+=======
+      const result = await response.json() as { translation: string; original_text?: string; detected_source_language?: string | null; warnings?: string[] };
+      if (isRevision) setTranslationRevised(result.translation);
+      else setTranslationResult(result.translation);
+      const detectedSource = result.detected_source_language ?? (result.original_text ? detectBridgeLanguage(result.original_text) : null);
+      if (!translationSourceLocked && detectedSource) setTranslationSource(detectedSource);
+      if (useFile && result.original_text) setTranslationText(result.original_text);
+      if (useFile && translationFile) {
+        const baseName = translationFile.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]+/g, '-').replace(/^-|-$/g, '') || 'document';
+        const targetCode = targetLanguage.replace(/[^a-zA-Z0-9-]/g, '') || 'translated';
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         const file = new File([result.translation], `vertex-${baseName}-${targetCode}.txt`, { type: 'text/plain;charset=utf-8' });
         setTranslationOutput({ file, url: URL.createObjectURL(file) });
         setTranslationMessage('Translation is ready. Download it or save it to your workspace history.');
       }
+<<<<<<< HEAD
       const targetName = languages.find(([code]) => code === translationTarget)?.[1] ?? 'your chosen language';
       encourageUser(`Your ${targetName} translation is ready. Take a look—you’re doing great!`);
     } catch (error) {
       setTranslationResult(error instanceof Error ? error.message : 'Translation failed.');
+=======
+      if (result.warnings?.length) setTranslationMessage(result.warnings.join(' '));
+      const targetName = languages.find(([code]) => code === targetLanguage)?.[1] ?? 'your chosen language';
+      encourageUser(`Your ${targetName} translation is ready. Take a look—you’re doing great!`);
+    } catch (error) {
+      setTranslationMessage(error instanceof Error ? error.message : 'Translation failed.');
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     } finally {
       setTranslationBusy(false);
     }
   }
 
+<<<<<<< HEAD
+=======
+  async function loadHumanizerFile(file: File) {
+    const requestId = ++humanizerFileRequestId.current;
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (!extension || !AI_READABLE_EXTENSIONS.includes(extension)) {
+      setHumanizerFile(null);
+      setHumanizerFileBusy(false);
+      setHumanizerError('This file type cannot be read. Try a PDF, Word, PowerPoint, HTML, text or similar document.');
+      return;
+    }
+    setHumanizerFile(file);
+    setHumanizerInput('');
+    setHumanizerOutput('');
+    setHumanizerError('');
+    setHumanizerNotice('');
+    if (!token) {
+      setHumanizerError('Sign in to extract text from your document.');
+      return;
+    }
+    setHumanizerFileBusy(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const response = await fetch(`${API}/api/ai/chat/attachment-text`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      const result = await response.json() as { text: string };
+      if (requestId !== humanizerFileRequestId.current) return;
+      setHumanizerInput(result.text);
+      setHumanizerNotice('Document text extracted. Review it, then choose your writing style and humanize it.');
+    } catch (error) {
+      if (requestId !== humanizerFileRequestId.current) return;
+      setHumanizerError(error instanceof Error ? error.message : 'Could not extract text from this document.');
+    } finally {
+      if (requestId === humanizerFileRequestId.current) setHumanizerFileBusy(false);
+    }
+  }
+
+  async function runHumanizer() {
+    if (!token) {
+      setHumanizerError('Sign in to use Humanizer.');
+      return;
+    }
+    if (!humanizerInput.trim()) {
+      setHumanizerError('Enter the text you want to humanize.');
+      return;
+    }
+    setHumanizerBusy(true);
+    setHumanizerError('');
+    setHumanizerNotice('');
+    try {
+      const response = await fetch(`${API}/api/ai/humanize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          text: humanizerInput.trim(),
+          writing_style: humanizerWritingStyle,
+          strength: humanizerStrength,
+        }),
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      const result = await response.json() as { humanized_text: string; notice?: string };
+      setHumanizerOutput(result.humanized_text);
+      setHumanizerNotice(`Your rewritten text is ready. Review it before using it.${result.notice ? ` ${result.notice}` : ''}`);
+    } catch (error) {
+      setHumanizerError(error instanceof Error ? error.message : 'Could not rewrite the text.');
+    } finally {
+      setHumanizerBusy(false);
+    }
+  }
+
+  async function copyHumanizerOutput() {
+    if (!humanizerOutput.trim()) return;
+    try {
+      await navigator.clipboard.writeText(humanizerOutput);
+      setHumanizerError('');
+      setHumanizerNotice('Humanized text copied to clipboard.');
+    } catch (error) {
+      setHumanizerError(error instanceof Error ? `Could not copy text: ${error.message}` : 'Could not copy text to clipboard.');
+    }
+  }
+
+  async function downloadHumanizerOutput() {
+    if (!token) {
+      setHumanizerError('Sign in to download the humanized document.');
+      return;
+    }
+    if (!humanizerOutput.trim()) return;
+    setHumanizerError('');
+    setHumanizerNotice('');
+    try {
+      const response = await fetch(`${API}/api/pdf/editor-export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: humanizerOutput, output_format: humanizerDownloadFormat, page_size: 'A4' }),
+      });
+      if (!response.ok) throw new Error(await responseError(response));
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `humanized-text.${humanizerDownloadFormat}`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setHumanizerNotice(`Downloaded humanized-text.${humanizerDownloadFormat}.`);
+    } catch (error) {
+      setHumanizerError(error instanceof Error ? error.message : 'Could not download the humanized document.');
+    }
+  }
+
+  function resetHumanizer() {
+    humanizerFileRequestId.current += 1;
+    setHumanizerFile(null);
+    setHumanizerInput('');
+    setHumanizerOutput('');
+    setHumanizerWritingStyle('simple');
+    setHumanizerStrength(3);
+    setHumanizerDownloadFormat('txt');
+    setHumanizerFileBusy(false);
+    setHumanizerError('');
+    setHumanizerNotice('');
+  }
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   function clearTranslationOutput() {
     setTranslationOutput(null);
     setTranslationResult('');
@@ -1238,7 +2142,11 @@ export default function App() {
 
   function chooseTemplatePhoto(file?: File) {
     if (!file) return;
+<<<<<<< HEAD
     if (!['image/png','image/jpeg','image/webp'].includes(file.type)) {
+=======
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       setPdfResult('Choose a PNG, JPEG, or WebP profile photo.');
       return;
     }
@@ -1339,10 +2247,17 @@ export default function App() {
     const activeTemplate = templateCatalog.find((item) => item.id === selectedTemplate);
     const fields = templateFields[selectedTemplate];
     const visiblePreviewFields = fields.filter((field) => (
+<<<<<<< HEAD
       !['full_name','title','email','phone','location','website'].includes(field.name)
       && templateDraft[field.name].trim()
     ));
     const contact = [templateDraft.email,templateDraft.phone,templateDraft.location,templateDraft.website].filter(Boolean).join(' · ');
+=======
+      !['full_name', 'title', 'email', 'phone', 'location', 'website'].includes(field.name)
+      && templateDraft[field.name].trim()
+    ));
+    const contact = [templateDraft.email, templateDraft.phone, templateDraft.location, templateDraft.website].filter(Boolean).join(' · ');
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     return (
       <>
         <div className="template-editor-heading">
@@ -1368,8 +2283,13 @@ export default function App() {
             {selectedTemplate === 'resume' && <div className="template-photo-uploader">
               <span className="template-photo-label">Profile photo <small>Optional · PNG, JPEG or WebP · up to 2 MB</small></span>
               <div>
+<<<<<<< HEAD
                 <label className="template-photo-pick"><UploadCloud size={15}/>{templatePhotoName || 'Choose a photo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event)=>chooseTemplatePhoto(event.target.files?.[0])}/></label>
                 {templatePhotoPreview&&<button className="template-photo-remove" onClick={()=>{setTemplatePhotoData('');setTemplatePhotoPreview('');setTemplatePhotoName('');}}>Remove</button>}
+=======
+                <label className="template-photo-pick"><UploadCloud size={15} />{templatePhotoName || 'Choose a photo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => chooseTemplatePhoto(event.target.files?.[0])} /></label>
+                {templatePhotoPreview && <button className="template-photo-remove" onClick={() => { setTemplatePhotoData(''); setTemplatePhotoPreview(''); setTemplatePhotoName(''); }}>Remove</button>}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               </div>
             </div>}
             <button className="primary full-button" disabled={!token || templateBusy} onClick={() => void generateTemplatePdf()}>{templateBusy ? 'Creating PDF…' : 'Generate PDF preview'}</button>
@@ -1378,9 +2298,15 @@ export default function App() {
           </section>
           <section className="template-live-panel">
             <div className="template-live-caption"><span className="eyebrow">LIVE PREVIEW</span><small>{templateLayout} · {palettes.find((palette) => palette.id === templateAccent)?.name}</small></div>
+<<<<<<< HEAD
             <article className={`template-paper ${templateLayout} accent-${templateAccent} ${templatePhotoPreview?'has-photo':''}`}>
               <span className="paper-kicker">{activeTemplate?.category}</span>
               {templatePhotoPreview&&selectedTemplate==='resume'&&<img className="template-photo-preview" src={templatePhotoPreview} alt="Resume profile preview"/>}
+=======
+            <article className={`template-paper ${templateLayout} accent-${templateAccent} ${templatePhotoPreview ? 'has-photo' : ''}`}>
+              <span className="paper-kicker">{activeTemplate?.category}</span>
+              {templatePhotoPreview && selectedTemplate === 'resume' && <img className="template-photo-preview" src={templatePhotoPreview} alt="Resume profile preview" />}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               <h2>{selectedTemplate === 'resume' ? (templateDraft.full_name || 'Your Name') : (templateDraft.title || activeTemplate?.name)}</h2>
               {selectedTemplate === 'resume' && templateDraft.title && <h3>{templateDraft.title}</h3>}
               {contact && <p className="paper-contact">{contact}</p>}
@@ -1427,7 +2353,11 @@ export default function App() {
             <div className="template-photo-uploader">
               <span className="template-photo-label">Profile photo <small>Optional · PNG, JPEG or WebP · up to 2 MB</small></span>
               <div>
+<<<<<<< HEAD
                 <label className="template-photo-pick"><UploadCloud size={15}/>{templatePhotoName || 'Choose a photo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { chooseTemplatePhoto(event.target.files?.[0]); event.target.value = ''; }} /></label>
+=======
+                <label className="template-photo-pick"><UploadCloud size={15} />{templatePhotoName || 'Choose a photo'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { chooseTemplatePhoto(event.target.files?.[0]); event.target.value = ''; }} /></label>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 {templatePhotoPreview && <button className="template-photo-remove" onClick={() => { setTemplatePhotoData(''); setTemplatePhotoPreview(''); setTemplatePhotoName(''); }}>Remove</button>}
               </div>
             </div>
@@ -1898,8 +2828,224 @@ export default function App() {
     setEditorText(value);
   }
 
+<<<<<<< HEAD
   async function saveEditor() {
     const hasEdits = Boolean(editorText.trim() || editorImagePreview || drawingHistory.length);
+=======
+  function rememberEditorSelection() {
+    const selection = window.getSelection();
+    if (selection?.rangeCount && editorTextRef.current?.contains(selection.anchorNode)) editorSelectionRef.current = selection.getRangeAt(0).cloneRange();
+  }
+
+  function formatEditor(command: string, value?: string, customFontSize?: string) {
+    const editor = editorTextRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    if (editorSelectionRef.current && selection) {
+      selection.removeAllRanges();
+      selection.addRange(editorSelectionRef.current);
+    }
+    pushEditorHistory();
+    document.execCommand(command, false, value);
+    if (command === 'fontSize') {
+      editor.querySelectorAll('font[size="7"]').forEach((font) => {
+        const span = document.createElement('span');
+        span.style.fontSize = `${customFontSize ?? value}px`;
+        span.innerHTML = font.innerHTML;
+        font.replaceWith(span);
+      });
+    }
+    setEditorText(editor.innerHTML);
+    rememberEditorSelection();
+  }
+
+  function pageScreenSize() {
+    const page = editorPageRef.current;
+    return page ? { w: page.clientWidth, h: page.clientHeight } : undefined;
+  }
+
+  const [editorFont, setEditorFont] = useState('Arial');
+  const [editorFontSize, setEditorFontSize] = useState(14);
+
+  /** Restore the saved selection, record undo history, run an edit, and sync state. */
+  function editorEdit(fn: (editor: HTMLElement, range: Range | null) => void) {
+    const editor = editorTextRef.current;
+    if (!editor) return;
+    editor.focus();
+    ensureBlocks(editor);
+    const selection = window.getSelection();
+    if (editorSelectionRef.current && selection) {
+      selection.removeAllRanges();
+      selection.addRange(editorSelectionRef.current);
+    }
+    pushEditorHistory();
+    document.execCommand('styleWithCSS', false, 'true');
+    fn(editor, selection && selection.rangeCount ? selection.getRangeAt(0) : null);
+    setEditorText(editor.innerHTML);
+    rememberEditorSelection();
+  }
+
+  function studioFontFamily(family: string) {
+    setEditorFont(family);
+    editorEdit((editor, range) => {
+      if (range && range.collapsed) {
+        const span = document.createElement('span');
+        span.style.fontFamily = `"${family}"`;
+        span.textContent = '\u200B';
+        range.insertNode(span);
+        range.setStart(span.firstChild as Node, 1);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else {
+        document.execCommand('fontName', false, family);
+      }
+    });
+  }
+
+  function studioFontSize(size: number) {
+    setEditorFontSize(size);
+    editorEdit((editor, range) => {
+      if (range && range.collapsed) {
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        span.textContent = '\u200B';
+        range.insertNode(span);
+        range.setStart(span.firstChild as Node, 1);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return;
+      }
+      document.execCommand('fontSize', false, '7');
+      editor.querySelectorAll('font[size="7"], span[style*="xxx-large"]').forEach((node) => {
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        span.innerHTML = (node as HTMLElement).innerHTML;
+        node.replaceWith(span);
+      });
+    });
+  }
+
+  function studioCommand(command: string, value?: string) {
+    editorEdit(() => { document.execCommand(command, false, command === 'formatBlock' ? `<${value}>` : value); });
+  }
+  function studioBullet(option: ListStyleOption) { editorEdit((editor) => applyListStyle(editor, false, option)); }
+  function studioNumber(option: ListStyleOption) { editorEdit((editor) => applyListStyle(editor, true, option)); }
+  function studioLineSpacing(value: string) { editorEdit((editor, range) => applyBlockCss(editor, range, { lineHeight: value })); }
+  function studioParagraphGap(px: string) { editorEdit((editor, range) => applyBlockCss(editor, range, { marginBottom: `${px}px` })); }
+  function studioCase(option: string) {
+    editorEdit((_editor, range) => {
+      const text = range?.toString() ?? '';
+      if (text) document.execCommand('insertText', false, transformCase(text, option));
+    });
+  }
+  function studioSymbol(symbol: string) { editorEdit(() => { document.execCommand('insertText', false, symbol); }); }
+  function studioTable(rows: number, cols: number) { editorEdit(() => { document.execCommand('insertHTML', false, tableHtml(rows, cols)); }); }
+
+  /** Click anywhere on the page to start typing there (adds the blank lines / indent needed). */
+  function pageMouseDown(event: React.MouseEvent<HTMLDivElement>) {
+    if (editorTool !== 'text') return;
+    const editor = editorTextRef.current;
+    if (!editor) return;
+    if (clickAndType(editor, event.clientX, event.clientY)) {
+      event.preventDefault();
+      setEditorText(editor.innerHTML);
+      rememberEditorSelection();
+    }
+  }
+
+  const [newPageDialog, setNewPageDialog] = useState<{ open: boolean; value: string; busy: boolean; error: string }>({ open: false, value: '1', busy: false, error: '' });
+
+  function openNewPageDialog() {
+    const total = editorPdfFile ? pdfPageCount : 1;
+    setNewPageDialog({ open: true, value: String(editorPdfFile ? Math.min(total + 1, pdfPageNumber + 1) : 2), busy: false, error: '' });
+  }
+
+  async function postForPdf(path: string, form: FormData, name: string) {
+    const response = await fetch(`${API}${path}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!response.ok) throw new Error(await responseError(response));
+    const blob = await response.blob();
+    return new File([blob], name, { type: 'application/pdf' });
+  }
+
+  /** Insert a blank page at `position` of the open PDF (or of the current page when no PDF is open). */
+  async function addPageAt(position: number) {
+    if (!token) { setNewPageDialog((d) => ({ ...d, error: 'Sign in to add pages.' })); return; }
+    const total = editorPdfFile ? pdfPageCount : 1;
+    if (!Number.isInteger(position) || position < 1 || position > total + 1) {
+      setNewPageDialog((d) => ({ ...d, error: `Enter a page number from 1 to ${total + 1}.` }));
+      return;
+    }
+    setNewPageDialog((d) => ({ ...d, busy: true, error: '' }));
+    try {
+      const hasEdits = Boolean(editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+      let base: File;
+      if (editorPdfFile && hasEdits) {
+        const form = new FormData();
+        form.append('file', editorPdfFile);
+        form.append('page', String(pdfPageNumber));
+        form.append('overlay_data', await editorPdfOverlay());
+        base = await postForPdf('/api/pdf/annotate', form, editorPdfFile.name);
+      } else if (editorPdfFile) {
+        base = editorPdfFile;
+      } else if (hasEdits) {
+        const body: Record<string, string> = { content: editorPlainText(editorText), output_format: 'pdf', page_size: 'A4', page_preview_data: await editorPagePreview() };
+        if (editorImagePreview) body.image_data = editorImagePreview.split(',')[1];
+        const response = await fetch(`${API}/api/pdf/editor-export`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+        if (!response.ok) throw new Error(await responseError(response));
+        base = new File([await response.blob()], 'vertex-document.pdf', { type: 'application/pdf' });
+      } else {
+        const form = new FormData();
+        form.append('pages', '1');
+        form.append('page_size', 'A4');
+        base = await postForPdf('/api/pdf/blank', form, 'vertex-document.pdf');
+      }
+      const form = new FormData();
+      form.append('file', base);
+      form.append('position', String(position));
+      const updated = await postForPdf('/api/pdf/insert-blank', form, base.name);
+      setEditorText('');
+      setEditorUndoHistory([]);
+      setEditorRedoHistory([]);
+      setEditorImageSource('');
+      setEditorImageName('');
+      setEditorImageSelected(false);
+      setDrawingHistory([]);
+      setPdfOutput(null);
+      setPdfResult(`Added a new page as page ${position}. Your document now has ${total + 1} pages.`);
+      setPdfFiles([updated]);
+      setPdfPageNumber(position);
+      await renderPdfPage(updated, position);
+      setNewPageDialog({ open: false, value: '1', busy: false, error: '' });
+    } catch (error) {
+      setNewPageDialog((d) => ({ ...d, busy: false, error: error instanceof Error ? error.message : 'The page could not be added.' }));
+    }
+  }
+
+  function startBlankDocument() {
+    const hasWork = Boolean(pdfOutput || pdfFiles.length || editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+    if (hasWork && !window.confirm('Start a new blank document? Anything you have not saved or downloaded will be cleared.')) return;
+    resetEditor();
+    setPdfAction('info');
+    window.setTimeout(() => { const editor = editorTextRef.current; if (editor) { ensureBlocks(editor); editor.focus(); } }, 50);
+  }
+
+  function clearEditorFormatting() {
+    formatEditor('removeFormat');
+    formatEditor('unlink');
+  }
+
+  function applyFontSize(size: string) {
+    formatEditor('fontSize', '7', size);
+  }
+
+  async function saveEditor() {
+    const hasEdits = Boolean(editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     if (pdfOutput && !hasEdits) {
       await savePdfOutput();
       return;
@@ -1921,7 +3067,11 @@ export default function App() {
   }
 
   async function downloadEditor() {
+<<<<<<< HEAD
     const hasEdits = Boolean(editorText.trim() || editorImagePreview || drawingHistory.length);
+=======
+    const hasEdits = Boolean(editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     if (pdfOutput && !hasEdits) {
       downloadPdfOutput();
       return;
@@ -1944,6 +3094,10 @@ export default function App() {
     setEditorImageName('');
     setEditorImageSelected(false);
     setEditorImagePosition({ x: 50, y: 62 });
+<<<<<<< HEAD
+=======
+    setEditorImageSize({ width: 32, height: 24 });
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     setEditorImageRotation(0);
     setEditorCropLeft(0);
     setEditorCropRight(0);
@@ -2003,7 +3157,11 @@ export default function App() {
 
   function changePdfPage(pageNumber: number) {
     if (!editorPdfFile || pageNumber < 1 || pageNumber > pdfPageCount || pageNumber === pdfPageNumber) return;
+<<<<<<< HEAD
     if (editorText.trim() || editorImageSource || drawingHistory.length) {
+=======
+    if (editorPlainText(editorText).trim() || editorImageSource || drawingHistory.length) {
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       setPdfRenderError('Apply your current page edits as a PDF before moving to another page.');
       return;
     }
@@ -2014,7 +3172,11 @@ export default function App() {
     void renderPdfPage(editorPdfFile, pageNumber);
   }
 
+<<<<<<< HEAD
   function selectPdfFiles(files: File[]) {
+=======
+  function selectPdfFiles(files: File[], forceSingle = false) {
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     const selected = files.filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     if (!selected.length) {
       setPdfResult('Choose a PDF file to open in the workspace.');
@@ -2024,7 +3186,11 @@ export default function App() {
       setPdfResult('Each PDF must be 50 MB or smaller.');
       return;
     }
+<<<<<<< HEAD
     const chosen = pdfAction === 'merge' ? selected : selected.slice(0, 1);
+=======
+    const chosen = pdfAction === 'merge' && !forceSingle ? [...pdfFiles, ...selected] : selected.slice(0, 1);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     setPdfFiles(chosen);
     setEditorPdfFile(chosen[0]);
     setEditorText('');
@@ -2043,6 +3209,42 @@ export default function App() {
     void renderPdfPage(chosen[0], 1);
   }
 
+<<<<<<< HEAD
+=======
+  function removeMergePdf(index: number) {
+    const next = pdfFiles.filter((_, fileIndex) => fileIndex !== index);
+    setPdfFiles(next);
+    setPdfOutput(null);
+    setPdfResult('');
+    if (index === 0) {
+      setEditorPdfFile(next[0] ?? null);
+      setPdfPageNumber(1);
+      setPdfPageImage('');
+      if (next[0]) void renderPdfPage(next[0], 1);
+      else {
+        setPdfPageCount(1);
+        setPdfPageDimensions({ width: 1000, height: 1414 });
+      }
+    }
+  }
+
+  function moveMergePdf(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= pdfFiles.length) return;
+    const next = [...pdfFiles];
+    [next[index], next[target]] = [next[target], next[index]];
+    setPdfFiles(next);
+    setPdfOutput(null);
+    setPdfResult('');
+    if (index === 0 || target === 0) {
+      setEditorPdfFile(next[0]);
+      setPdfPageNumber(1);
+      setPdfPageImage('');
+      void renderPdfPage(next[0], 1);
+    }
+  }
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   async function loadEditorImage(file?: File) {
     if (!file) return;
     const allowed = ['image/png', 'image/jpeg', 'image/webp'];
@@ -2051,10 +3253,25 @@ export default function App() {
       return;
     }
     try {
+<<<<<<< HEAD
       setEditorImageSource(await readImageData(file));
       setEditorImageName(file.name);
       setEditorImageSelected(false);
       setEditorImagePosition({ x: 50, y: 62 });
+=======
+      const imageData = await readImageData(file);
+      const image = await loadImage(imageData);
+      setEditorImageSource(imageData);
+      setEditorImageName(file.name);
+      setEditorImageSelected(false);
+      setEditorImagePosition({ x: 50, y: 62 });
+      const page = editorPageRef.current?.getBoundingClientRect();
+      const pageWidth = page?.width || 470;
+      const pageHeight = page?.height || pageWidth * 297 / 210;
+      const imageAspect = image.naturalWidth / image.naturalHeight;
+      const width = Math.min(48, 40 * pageWidth / pageHeight * imageAspect);
+      setEditorImageSize({ width, height: width * pageHeight / pageWidth / imageAspect });
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       setEditorImageRotation(0);
       setEditorCropLeft(0);
       setEditorCropRight(0);
@@ -2084,17 +3301,114 @@ export default function App() {
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+<<<<<<< HEAD
+=======
+  function editorImagePreviewLoaded(event: SyntheticEvent<HTMLImageElement>) {
+    const image = event.currentTarget;
+    const page = editorPageRef.current?.getBoundingClientRect();
+    if (!page || !image.naturalWidth || !image.naturalHeight) return;
+    const pageWidth = page.width;
+    const pageHeight = page.height;
+    const pageAspect = pageWidth / pageHeight;
+    const ratioInPage = image.naturalWidth / image.naturalHeight * pageAspect;
+    const area = editorImageSize.width * editorImageSize.height;
+    let width = Math.sqrt(area * ratioInPage);
+    let height = width / ratioInPage;
+    if (width > 96) { width = 96; height = width / ratioInPage; }
+    if (height > 96) { height = 96; width = height * ratioInPage; }
+    setEditorImageSize({ width, height });
+    setEditorImagePosition((position) => ({
+      x: Math.max(width / 2, Math.min(100 - width / 2, position.x)),
+      y: Math.max(height / 2, Math.min(100 - height / 2, position.y)),
+    }));
+  }
+
+  function editorImageResizeStart(event: ReactPointerEvent<HTMLButtonElement>, handle: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setEditorImageSelected(true);
+    const page = editorPageRef.current?.getBoundingClientRect();
+    const image = event.currentTarget.parentElement?.getBoundingClientRect();
+    if (!page || !image) return;
+    imageResizeSession.current = {
+      handle, startX: event.clientX, startY: event.clientY,
+      left: image.left - page.left, top: image.top - page.top,
+      width: image.width, height: image.height, aspect: image.width / image.height,
+      pageWidth: page.width, pageHeight: page.height,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function editorImageResizeMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const session = imageResizeSession.current;
+    if (!session) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const { handle, startX, startY, left, top, width, height, aspect, pageWidth, pageHeight } = session;
+    const east = handle.includes('e');
+    const west = handle.includes('w');
+    const north = handle.includes('n');
+    const south = handle.includes('s');
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    const minSize = 24;
+    let nextWidth = width;
+    let nextHeight = height;
+    if ((east || west) && (north || south)) {
+      const widthChange = dx * (east ? 1 : -1);
+      const heightAsWidthChange = dy * (south ? 1 : -1) * aspect;
+      nextWidth = width + (Math.abs(widthChange) >= Math.abs(heightAsWidthChange) ? widthChange : heightAsWidthChange);
+      nextHeight = nextWidth / aspect;
+    } else if (east || west) nextWidth = width + dx * (east ? 1 : -1);
+    else nextHeight = height + dy * (south ? 1 : -1);
+
+    const availableWidth = west ? left + width : east ? pageWidth - left : pageWidth;
+    const availableHeight = north ? top + height : south ? pageHeight - top : pageHeight;
+    if ((east || west) && (north || south)) {
+      const maxWidth = Math.min(availableWidth, availableHeight * aspect);
+      nextWidth = Math.max(Math.min(minSize, maxWidth), Math.min(nextWidth, maxWidth));
+      nextHeight = nextWidth / aspect;
+    } else {
+      if (east || west) nextWidth = Math.max(Math.min(minSize, availableWidth), Math.min(nextWidth, availableWidth));
+      if (north || south) nextHeight = Math.max(Math.min(minSize, availableHeight), Math.min(nextHeight, availableHeight));
+    }
+    let nextLeft = west ? left + width - nextWidth : left;
+    let nextTop = north ? top + height - nextHeight : top;
+    nextLeft = Math.max(0, Math.min(pageWidth - nextWidth, nextLeft));
+    nextTop = Math.max(0, Math.min(pageHeight - nextHeight, nextTop));
+    setEditorImageSize({ width: nextWidth / pageWidth * 100, height: nextHeight / pageHeight * 100 });
+    setEditorImagePosition({ x: (nextLeft + nextWidth / 2) / pageWidth * 100, y: (nextTop + nextHeight / 2) / pageHeight * 100 });
+  }
+
+  function editorImageResizeEnd(event?: ReactPointerEvent<HTMLButtonElement>) {
+    event?.stopPropagation();
+    imageResizeSession.current = null;
+  }
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   function editorPagePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (!imageDragOffset.current) return;
     const page = editorPageRef.current?.getBoundingClientRect();
     if (!page) return;
+<<<<<<< HEAD
     const x = (event.clientX - page.left) / page.width * 100 - imageDragOffset.current.x;
     const y = (event.clientY - page.top) / page.height * 100 - imageDragOffset.current.y;
     setEditorImagePosition({ x: Math.max(4, Math.min(96, x)), y: Math.max(4, Math.min(96, y)) });
+=======
+    const halfWidth = editorImageSize.width / 2;
+    const halfHeight = editorImageSize.height / 2;
+    const x = (event.clientX - page.left) / page.width * 100 - imageDragOffset.current.x;
+    const y = (event.clientY - page.top) / page.height * 100 - imageDragOffset.current.y;
+    setEditorImagePosition({ x: Math.max(halfWidth, Math.min(100 - halfWidth, x)), y: Math.max(halfHeight, Math.min(100 - halfHeight, y)) });
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   }
 
   function editorPagePointerUp() {
     imageDragOffset.current = null;
+<<<<<<< HEAD
+=======
+    imageResizeSession.current = null;
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   }
 
   function restoreDrawing(data: string) {
@@ -2197,12 +3511,20 @@ export default function App() {
     context.fillRect(0, 0, preview.width, preview.height);
     const drawing = drawingCanvasRef.current;
     if (drawing) context.drawImage(drawing, 0, 0, preview.width, preview.height);
+<<<<<<< HEAD
     drawEditorText(context, preview.width, preview.height, editorText);
     if (editorImagePreview) {
       const image = await loadImage(editorImagePreview);
       const scale = Math.min(320 / image.width, 390 / image.height, 1);
       const width = image.width * scale;
       const height = image.height * scale;
+=======
+    await drawRichText(context, editorText, preview.width, preview.height, pageScreenSize());
+    if (editorImagePreview) {
+      const image = await loadImage(editorImagePreview);
+      const width = preview.width * editorImageSize.width / 100;
+      const height = preview.height * editorImageSize.height / 100;
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       const centerX = editorImagePosition.x / 100 * preview.width;
       const centerY = editorImagePosition.y / 100 * preview.height;
       context.drawImage(image, centerX - width / 2, centerY - height / 2, width, height);
@@ -2216,6 +3538,7 @@ export default function App() {
     overlay.height = pdfPageDimensions.height;
     const context = overlay.getContext('2d');
     if (!context) throw new Error('Document editing is not available in this browser.');
+<<<<<<< HEAD
     const scale = overlay.width / 1000;
     const drawing = drawingCanvasRef.current;
     if (drawing) context.drawImage(drawing, 0, 0, overlay.width, overlay.height);
@@ -2225,6 +3548,15 @@ export default function App() {
       const imageScale = Math.min(320 * scale / image.width, 390 * scale / image.height, 1);
       const width = image.width * imageScale;
       const height = image.height * imageScale;
+=======
+    const drawing = drawingCanvasRef.current;
+    if (drawing) context.drawImage(drawing, 0, 0, overlay.width, overlay.height);
+    await drawRichText(context, editorText, overlay.width, overlay.height, pageScreenSize());
+    if (editorImagePreview) {
+      const image = await loadImage(editorImagePreview);
+      const width = overlay.width * editorImageSize.width / 100;
+      const height = overlay.height * editorImageSize.height / 100;
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       const centerX = editorImagePosition.x / 100 * overlay.width;
       const centerY = editorImagePosition.y / 100 * overlay.height;
       context.drawImage(image, centerX - width / 2, centerY - height / 2, width, height);
@@ -2255,7 +3587,11 @@ export default function App() {
         form.append('overlay_data', await editorPdfOverlay());
         response = await fetch(`${API}/api/pdf/annotate`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
       } else if (editorPdfFile) {
+<<<<<<< HEAD
         if (editorText.trim() || editorImagePreview || hasDrawing) {
+=======
+        if (editorPlainText(editorText).trim() || editorImagePreview || hasDrawing) {
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           throw new Error('To keep edits on the opened PDF, export as PDF. DOCX and TXT conversions extract the original file content.');
         }
         const form = new FormData();
@@ -2263,7 +3599,11 @@ export default function App() {
         form.append('output_format', editorExportFormat);
         response = await fetch(`${API}/api/pdf/convert`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
       } else {
+<<<<<<< HEAD
         const body: Record<string, string> = { content: editorText, output_format: editorExportFormat, page_size: 'A4' };
+=======
+        const body: Record<string, string> = { content: editorPlainText(editorText), output_format: editorExportFormat, page_size: 'A4' };
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         if (editorImagePreview) body.image_data = editorImagePreview.split(',')[1];
         if (editorExportFormat === 'pdf') body.page_preview_data = await editorPagePreview();
         if (editorExportFormat === 'docx' && hasDrawing && canvas) body.drawing_data = canvas.toDataURL('image/png').split(',')[1];
@@ -2316,9 +3656,19 @@ export default function App() {
         {documents.map((item) => (
           <div className="document-row" key={item.id}>
             <span className="document-icon"><FileText size={19} /></span>
+<<<<<<< HEAD
             <span className="document-name"><b>{item.name}</b><small>{formatSize(item.size)}</small></span>
             <button title={`Download ${item.name}`} onClick={() => void downloadDocument(item)}><Download size={17} /></button>
             <button title={`Delete ${item.name}`} onClick={() => void deleteDocument(item)}><Trash2 size={17} /></button>
+=======
+            <button className="document-name vx-doc-open" title={`Open ${item.name}`} onClick={() => void openInExternalViewer(item)}><b>{item.name}</b><small>{formatSize(item.size)}</small></button>
+            <button title={`Open ${item.name}`} aria-label={`Open ${item.name}`} onClick={() => void openInExternalViewer(item)}><FolderOpen size={17} /></button>
+            <button title={`Edit ${item.name}`} aria-label={`Edit ${item.name}`} onClick={() => void openDocument(item)}><SquarePen size={17} /></button>
+
+            <button title={`Use ${item.name} with AI`} aria-label={`Use ${item.name} with AI`} onClick={() => { chooseAiDocument(String(item.id)); setPage('AI Documents'); }}><Sparkles size={17} /></button>
+            <button title={`Download ${item.name}`} aria-label={`Download ${item.name}`} onClick={() => void downloadDocument(item)}><Download size={17} /></button>
+            <button title={`Delete ${item.name}`} aria-label={`Delete ${item.name}`} onClick={() => void deleteDocument(item)}><Trash2 size={17} /></button>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           </div>
         ))}
       </div>
@@ -2331,12 +3681,21 @@ export default function App() {
         const extension = item.name.split('.').pop()?.toLowerCase() ?? '';
         const matchesType = historyFilter === 'all'
           || (historyFilter === 'pdf' && extension === 'pdf')
+<<<<<<< HEAD
           || (historyFilter === 'word' && ['doc','docx'].includes(extension))
           || (historyFilter === 'text' && ['txt','md'].includes(extension));
         return matchesType && item.name.toLowerCase().includes(historyQuery.trim().toLowerCase());
       })
       .sort((a,b) => historySort === 'name' ? a.name.localeCompare(b.name) : b.size-a.size);
     const totalBytes = documents.reduce((sum,item) => sum + item.size,0);
+=======
+          || (historyFilter === 'word' && ['doc', 'docx'].includes(extension))
+          || (historyFilter === 'text' && ['txt', 'md'].includes(extension));
+        return matchesType && item.name.toLowerCase().includes(historyQuery.trim().toLowerCase());
+      })
+      .sort((a, b) => historySort === 'name' ? a.name.localeCompare(b.name) : b.size - a.size);
+    const totalBytes = documents.reduce((sum, item) => sum + item.size, 0);
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     const pdfCount = documents.filter((item) => item.name.toLowerCase().endsWith('.pdf')).length;
     return (
       <>
@@ -2357,7 +3716,11 @@ export default function App() {
             <label className="history-sort">Sort by<select value={historySort} onChange={(event) => setHistorySort(event.target.value as 'name' | 'largest')}><option value="name">Name</option><option value="largest">Largest</option></select></label>
           </div>
           <div className="history-filters" role="group" aria-label="Filter documents by type">
+<<<<<<< HEAD
             {([['all','All files'],['pdf','PDF'],['word','Word'],['text','Text']] as const).map(([id,label]) => <button key={id} className={historyFilter===id?'active':''} aria-pressed={historyFilter===id} onClick={() => setHistoryFilter(id)}>{label}</button>)}
+=======
+            {([['all', 'All files'], ['pdf', 'PDF'], ['word', 'Word'], ['text', 'Text']] as const).map(([id, label]) => <button key={id} className={historyFilter === id ? 'active' : ''} aria-pressed={historyFilter === id} onClick={() => setHistoryFilter(id)}>{label}</button>)}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           </div>
           {!token ? <div className="empty-state">Sign in to view your private document history.</div>
             : !documents.length ? <div className="history-empty"><FileText size={28} /><b>Your workspace is ready</b><span>Upload a PDF or document to start building your library.</span></div>
@@ -2367,8 +3730,17 @@ export default function App() {
                   return (
                     <article className="history-card" key={item.id}>
                       <span className="history-file-icon"><FileText size={20} /><small>{extension}</small></span>
+<<<<<<< HEAD
                       <div className="history-file-main"><b title={item.name}>{item.name}</b><small>{extension} document · {formatSize(item.size)}</small></div>
                       <div className="history-card-actions">
+=======
+                      <div className="history-file-main"><b title={item.name}>{item.name}</b><small>{extension} document · {formatSize(item.size)}{historyDocs[item.id]?.uploaded_at ? ` · Uploaded ${formatWhen(historyDocs[item.id].uploaded_at)}` : ''}{historyDocs[item.id]?.last_action ? ` · Last: ${historyDocs[item.id].last_action}` : ''}{historyDocs[item.id]?.active_shares ? ` · Shared (${historyDocs[item.id].active_shares})` : ''}{historyDocs[item.id]?.signature_status ? ` · Signature ${historyDocs[item.id].signature_status}` : ''}</small></div>
+                      <div className="history-card-actions">
+                        <button title={`Open ${item.name}`} onClick={() => void openInExternalViewer(item)}><FolderOpen size={16} /><span>Open</span></button>
+
+                        <button title={`Share ${item.name}`} onClick={() => setShareTarget(item)}><Share2 size={16} /><span>Share</span></button>
+                        {item.name.toLowerCase().endsWith('.pdf') && <button title={`Annotate ${item.name}`} onClick={() => setAnnotateTarget(item)}><Pencil size={16} /><span>Annotate</span></button>}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                         <button title={`Ask AI about ${item.name}`} onClick={() => { chooseAiDocument(String(item.id)); setPage('AI Documents'); }}><Sparkles size={16} /><span>Use with AI</span></button>
                         <button title={`Download ${item.name}`} onClick={() => void downloadDocument(item)}><Download size={16} /><span>Download</span></button>
                         <button className="history-delete" title={`Delete ${item.name}`} onClick={() => void deleteDocument(item)}><Trash2 size={16} /><span>Delete</span></button>
@@ -2377,6 +3749,10 @@ export default function App() {
                   );
                 })}</div>}
         </section>
+<<<<<<< HEAD
+=======
+        {token && <ActivityList token={token} refreshKey={historyTick} />}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       </>
     );
   }
@@ -2390,7 +3766,11 @@ export default function App() {
         <section className="ai-companion-card">
           <span className="ai-companion-character" aria-hidden="true">{companion.emoji}</span>
           <div className="ai-companion-copy"><b>{companion.name} is here to help</b><p role="status" aria-live="polite">{aiCompanionLine}</p></div>
+<<<<<<< HEAD
           <button onClick={() => speakText(aiCompanionLine)} title="Read companion message aloud"><Volume2 size={16} /><span>{isSpeaking?'Speaking…':'Listen'}</span></button>
+=======
+          <button onClick={() => speakText(aiCompanionLine)} title="Read companion message aloud"><Volume2 size={16} /><span>{isSpeaking ? 'Speaking…' : 'Listen'}</span></button>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         </section>
         <section className="panel ai-document-picker">
           <div className="ai-document-picker-copy"><span className="eyebrow">CHOOSE A DOCUMENT</span><h2>What would you like to work on?</h2><p>Select a file already in your workspace. Your document stays private to your account.</p></div>
@@ -2401,6 +3781,7 @@ export default function App() {
                 {documents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
+<<<<<<< HEAD
             <label className="primary button-label"><UploadCloud size={16} /> Upload a document<input type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" onChange={async (event) => {
               const file=event.target.files?.[0];
               if (!file || !token) { setAiCompanionLine('Sign in before uploading a document for AI features.'); return; }
@@ -2409,6 +3790,16 @@ export default function App() {
                 const response=await fetch(`${API}/api/documents/upload`,{method:'POST',headers:{Authorization:`Bearer ${token}`},body:form});
                 if (!response.ok) throw new Error(await responseError(response));
                 const uploaded=await response.json() as {id:number;name:string};
+=======
+            <label className="primary button-label"><UploadCloud size={16} /> Upload a document<input type="file" accept={AI_READABLE_ACCEPT} onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file || !token) { setAiCompanionLine('Sign in before uploading a document for AI features.'); return; }
+              const form = new FormData(); form.append('file', file);
+              try {
+                const response = await fetch(`${API}/api/documents/upload`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+                if (!response.ok) throw new Error(await responseError(response));
+                const uploaded = await response.json() as { id: number; name: string };
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 await loadDocuments();
                 chooseAiDocument(String(uploaded.id));
                 setAiCompanionLine(`“${uploaded.name}” is ready. Choose what you’d like to do with it!`);
@@ -2422,6 +3813,7 @@ export default function App() {
         </section>
         <div className="ai-document-workspace">
           <nav className="ai-mode-tabs" role="tablist" aria-label="AI document actions">
+<<<<<<< HEAD
             {([['summary','Summarize',BookOpen],['chat','Ask your document',MessageCircle],['translate','Translate',Languages]] as const).map(([mode,label,Icon]) => <button key={mode} className={aiDocMode===mode?'active':''} role="tab" aria-selected={aiDocMode===mode} onClick={() => {setAiDocMode(mode);setVoiceFeedback('');}}><Icon size={16}/>{label}</button>)}
           </nav>
           <div className="panel ai-document-panel">
@@ -2435,6 +3827,21 @@ export default function App() {
                 {aiDocSummary && <section className="ai-response-card"><div className="ai-response-heading"><span className="ai-response-avatar">{companion.emoji}</span><span><b>{companion.name}’s summary</b><small>{selectedLabel}</small></span><button aria-label="Read summary aloud" onClick={() => speakText(aiDocSummary)}><Volume2 size={16}/><span>Listen</span></button></div><p>{aiDocSummary}</p></section>}
               </div>
                 : aiDocMode==='chat' ? (
+=======
+            {([['summary', 'Summarize', BookOpen], ['chat', 'Ask your document', MessageCircle], ['translate', 'Translate', Languages]] as const).map(([mode, label, Icon]) => <button key={mode} className={aiDocMode === mode ? 'active' : ''} role="tab" aria-selected={aiDocMode === mode} onClick={() => { setAiDocMode(mode); setVoiceFeedback(''); }}><Icon size={16} />{label}</button>)}
+          </nav>
+          <div className="panel ai-document-panel">
+            <div className="ai-language-choice"><label className="field-label">Assistant language
+              <select value={language} onChange={(event) => void savePreferences({ language: event.target.value })}>{languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>
+            </label><small>13 choices, including Tanglish. Voice input and playback use your device’s available language voices.</small></div>
+            {!selectedDocument ? <div className="ai-select-prompt"><span>{companion.emoji}</span><b>Pick a document to begin</b><p>Choose an uploaded document, spreadsheet, slide deck, ebook, archive, or image above.</p></div>
+              : aiDocMode === 'summary' ? <div className="ai-summary-workspace">
+                <div className="ai-feature-intro"><span className="ai-feature-icon"><BookOpen size={20} /></span><div><h2>A helpful summary, in your language</h2><p>Get the main ideas, key details and action items from <b>{selectedLabel}</b>.</p></div></div>
+                <button className="primary ai-action-button" disabled={!token || aiDocSummaryBusy} onClick={() => void summarizeAiDocument()}>{aiDocSummaryBusy ? <RefreshCw className="spin" size={16} /> : <Sparkles size={16} />} {aiDocSummaryBusy ? 'Reading your document…' : 'Summarize document'}</button>
+                {aiDocSummary && <section className="ai-response-card"><div className="ai-response-heading"><span className="ai-response-avatar">{companion.emoji}</span><span><b>{companion.name}’s summary</b><small>{selectedLabel}</small></span><button aria-label="Read summary aloud" onClick={() => speakText(aiDocSummary)}><Volume2 size={16} /><span>Listen</span></button></div><p>{aiDocSummary}</p></section>}
+              </div>
+                : aiDocMode === 'chat' ? (
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                   <div className="ai-chat-workspace">
                     <AiDocChat
                       selectedLabel={selectedLabel}
@@ -2451,6 +3858,7 @@ export default function App() {
                   </div>
                 )
                   : <div className="ai-translate-workspace">
+<<<<<<< HEAD
                     <div className="ai-feature-intro"><span className="ai-feature-icon"><Languages size={20}/></span><div><h2>Translate the whole document</h2><p>Keep the original untouched and get a translated text file you can download.</p></div></div>
                     <div className="translation-language-row ai-translation-language-row">
                       <label className="field-label">From<select value={aiDocSource} onChange={(event)=>setAiDocSource(event.target.value)}><option value="auto">Detect language</option>{languages.map(([code,label])=><option key={code} value={code}>{label}</option>)}</select></label>
@@ -2463,6 +3871,20 @@ export default function App() {
             {!token&&<p className="inline-hint">Sign in to summarize, chat with, or translate your documents. Add an LLM_API_KEY in the backend environment to enable AI.</p>}
             {aiDocError&&<p className="ai-error" role="alert">{aiDocError}</p>}
             {voiceFeedback&&<p className="voice-feedback" role="status">{voiceFeedback}</p>}
+=======
+                    <div className="ai-feature-intro"><span className="ai-feature-icon"><Languages size={20} /></span><div><h2>Translate the whole document</h2><p>Keep the original untouched and get a translated text file you can download.</p></div></div>
+                    <div className="translation-language-row ai-translation-language-row">
+                      <label className="field-label">From<select value={aiDocSource} onChange={(event) => setAiDocSource(event.target.value)}><option value="auto">Detect language</option>{languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+                      <ArrowLeftRight className="translation-arrow" size={18} />
+                      <label className="field-label">To<select value={aiDocTarget} onChange={(event) => setAiDocTarget(event.target.value)}>{languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+                    </div>
+                    <button className="primary ai-action-button" disabled={!token || aiDocTranslateBusy} onClick={() => void translateAiDocument()}>{aiDocTranslateBusy ? <RefreshCw className="spin" size={16} /> : <Languages size={16} />} {aiDocTranslateBusy ? 'Translating document…' : 'Translate document'}</button>
+                    {aiDocTranslation && <section className="ai-response-card"><div className="ai-response-heading"><span className="ai-response-avatar">{companion.emoji}</span><span><b>Translation ready</b><small>{languages.find(([code]) => code === aiDocTarget)?.[1]}</small></span><button onClick={() => speakText(aiDocTranslation, aiDocTarget)}><Volume2 size={16} /><span>Listen</span></button></div><p>{aiDocTranslation}</p><button className="download-translation-button" onClick={downloadAiTranslation}><Download size={15} />Download translated text</button></section>}
+                  </div>}
+            {!token && <p className="inline-hint">Sign in to summarize, chat with, or translate your documents.</p>}
+            {aiDocError && <p className="ai-error" role="alert">{aiDocError}</p>}
+            {voiceFeedback && <p className="voice-feedback" role="status">{voiceFeedback}</p>}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           </div>
         </div>
       </>
@@ -2481,6 +3903,7 @@ export default function App() {
     ];
     const drawCanvas = drawingCanvasRef.current;
     const hasDrawing = Boolean(drawCanvas && drawingHistory.length);
+<<<<<<< HEAD
     const hasEditorWork = Boolean(pdfOutput || pdfFiles.length || editorText.trim() || editorImagePreview || drawingHistory.length);
     return (
       <>
@@ -2489,6 +3912,32 @@ export default function App() {
           <button onClick={resetEditor}><FilePlus2 size={15} /> New page</button>
           <button onClick={() => pdfFileInputRef.current?.click()}><UploadCloud size={15} /> Open PDF</button>
           <input ref={pdfFileInputRef} type="file" accept="application/pdf,.pdf" multiple={pdfAction === 'merge'} onChange={(event) => { selectPdfFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
+=======
+    const hasEditorWork = Boolean(pdfOutput || pdfFiles.length || editorPlainText(editorText).trim() || editorImagePreview || drawingHistory.length);
+    return (
+      <>
+        <PageHeading eyebrow="PDF STUDIO" title="A clear space for document work" subtitle="Edit a new page or run a PDF tool. Results appear here for review before you keep them." />
+        {newPageDialog.open && <div className="vd-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !newPageDialog.busy) setNewPageDialog((d) => ({ ...d, open: false })); }}>
+          <form className="vd-dialog" noValidate role="dialog" aria-modal="true" aria-labelledby="new-page-title" onSubmit={(event) => { event.preventDefault(); void addPageAt(Number(newPageDialog.value)); }}>
+            <h3 id="new-page-title">Add a new page</h3>
+            <p>{editorPdfFile ? `Your PDF has ${pdfPageCount} page${pdfPageCount === 1 ? '' : 's'}.` : 'Your blank document has 1 page.'} The new page becomes the page number you choose, and the pages after it move down.</p>
+            <label className="field-label">New page at page number
+              <input autoFocus type="number" min={1} max={(editorPdfFile ? pdfPageCount : 1) + 1} value={newPageDialog.value} onChange={(event) => setNewPageDialog((d) => ({ ...d, value: event.target.value, error: '' }))} />
+            </label>
+            <small>1 puts it first. {(editorPdfFile ? pdfPageCount : 1) + 1} adds it at the end.</small>
+            {newPageDialog.error && <p className="ai-error" role="alert">{newPageDialog.error}</p>}
+            <div className="vd-dialog-actions">
+              <button type="button" disabled={newPageDialog.busy} onClick={() => setNewPageDialog((d) => ({ ...d, open: false }))}>Cancel</button>
+              <button type="submit" className="primary" disabled={newPageDialog.busy}>{newPageDialog.busy ? 'Adding…' : 'Add page'}</button>
+            </div>
+          </form>
+        </div>}
+        <div className="pdf-editor-toolbar">
+          <button onClick={openNewPageDialog}><FilePlus2 size={15} /> New page</button>
+          <button className="primary" onClick={startBlankDocument}><FilePlus2 size={15} /> New Blank Document</button>
+          <button onClick={() => pdfFileInputRef.current?.click()}><UploadCloud size={15} /> Open PDF</button>
+          <input ref={pdfFileInputRef} type="file" accept="application/pdf,.pdf" onChange={(event) => { selectPdfFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           <button disabled={!token || pdfSaveBusy || editorBusy || (!pdfOutput && !hasEditorWork)} onClick={() => void saveEditor()}><Save size={15} /> {pdfSaveBusy ? 'Saving…' : 'Save'}</button>
           <button disabled={!editorUndoHistory.length} onClick={undoEditor}><Undo2 size={15} /> Undo</button>
           <button disabled={!editorRedoHistory.length} onClick={redoEditor}><Redo2 size={15} /> Redo</button>
@@ -2498,6 +3947,26 @@ export default function App() {
           <button className="primary" disabled={!token || editorBusy} onClick={() => void exportEditor()}>{editorBusy ? 'Creating…' : `Create ${editorExportFormat.toUpperCase()}`}</button>
           <button disabled={!hasEditorWork || (!token && !editorPdfFile && !pdfOutput)} onClick={() => void downloadEditor()}><Download size={15} /> Download</button>
         </div>
+<<<<<<< HEAD
+=======
+        <EditorToolbar
+          fontFamily={editorFont}
+          fontSize={editorFontSize}
+          onRemember={rememberEditorSelection}
+          onCommand={studioCommand}
+          onFontFamily={studioFontFamily}
+          onFontSize={studioFontSize}
+          onBullet={studioBullet}
+          onNumber={studioNumber}
+          onLineSpacing={studioLineSpacing}
+          onParagraphGap={studioParagraphGap}
+          onCase={studioCase}
+          onSymbol={studioSymbol}
+          onTable={studioTable}
+          onImage={() => imageFileInputRef.current?.click()}
+          onClear={clearEditorFormatting}
+        />
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         <div className="pdf-editor-layout">
           <section className="panel pdf-tool-panel">
             <div className="section-title"><div><h2>PDF tools</h2><p>Select an action, choose your file, and review its result in this page.</p></div></div>
@@ -2530,6 +3999,7 @@ export default function App() {
             </div>
             <div className={`editor-stage ${editorDropActive ? 'editor-drop-active' : ''}`} onDragOver={(event) => { event.preventDefault(); setEditorDropActive(true); }} onDragLeave={() => setEditorDropActive(false)} onDrop={(event) => { event.preventDefault(); setEditorDropActive(false); const file = event.dataTransfer.files[0]; if (file?.type === 'application/pdf' || file?.name.toLowerCase().endsWith('.pdf')) selectPdfFiles(Array.from(event.dataTransfer.files)); else void loadEditorImage(file); }}>
               {pdfOutput && pdfOutput.file.type !== 'application/pdf' ? <div className="editor-nonpdf-result"><FileText size={32} /><b>{pdfOutput.file.name} is ready</b><span>Preview is available after you download or open this file.</span></div>
+<<<<<<< HEAD
                 : hasPdfCanvas || (!pdfSourceUrl && !pdfOutput) ? <div className="editor-page" ref={editorPageRef} style={hasPdfCanvas ? { aspectRatio: `${pdfPageDimensions.width} / ${pdfPageDimensions.height}` } : undefined} onClick={(event) => { if (!(event.target instanceof Element) || !event.target.closest('.editor-page-photo, .editor-image-float-tools')) setEditorImageSelected(false); }} onPointerMove={editorPagePointerMove} onPointerUp={editorPagePointerUp} onPointerCancel={editorPagePointerUp}>
                       {hasPdfCanvas && <img className="editor-page-pdf-bg" src={pdfPageImage} alt={`PDF page ${pdfPageNumber}`} draggable={false} />}
                       <textarea className="editor-page-text" aria-label="Document text" value={editorText} onChange={(event) => updateEditorText(event.target.value)} style={{ pointerEvents: editorTool === 'text' ? 'auto' : 'none' }} placeholder="Click here and start typing…" />
@@ -2545,6 +4015,43 @@ export default function App() {
                       <canvas className={`editor-page-drawing ${editorTool !== 'text' ? 'interactive' : ''}`} ref={drawingCanvasRef} aria-label="Drawing and highlighter canvas" onPointerDown={startEditorStroke} onPointerMove={continueEditorStroke} onPointerUp={endEditorStroke} onPointerCancel={endEditorStroke} onPointerLeave={endEditorStroke} style={{ pointerEvents: editorTool === 'text' ? 'none' : 'auto' }} />
                     </div> : null}
                     {!hasPdfCanvas && (pdfSourceUrl || pdfOutput?.file.type === 'application/pdf') && <iframe className="editor-pdf-frame" src={pdfOutput?.url || pdfSourceUrl} title="Preview of the selected PDF" />}
+=======
+                : hasPdfCanvas || (!pdfSourceUrl && !pdfOutput) ? <div className="editor-page" ref={editorPageRef} style={hasPdfCanvas ? { aspectRatio: `${pdfPageDimensions.width} / ${pdfPageDimensions.height}` } : undefined} onClick={(event) => { if (!(event.target instanceof Element) || !event.target.closest('.editor-page-photo, .editor-image-float-tools, .editor-image-resize-handle')) setEditorImageSelected(false); }} onPointerMove={editorPagePointerMove} onPointerUp={editorPagePointerUp} onPointerCancel={editorPagePointerUp}>
+                  {hasPdfCanvas && <img className="editor-page-pdf-bg" src={pdfPageImage} alt={`PDF page ${pdfPageNumber}`} draggable={false} />}
+                  <div
+                    ref={editorTextRef}
+                    className="editor-page-text"
+                    aria-label="Document text"
+                    role="textbox"
+                    aria-multiline="true"
+                    contentEditable={editorTool === 'text'}
+                    suppressContentEditableWarning
+                    spellCheck
+                    onInput={(event) => { pushEditorHistory(); setEditorText(event.currentTarget.innerHTML); }}
+                    onMouseDown={pageMouseDown}
+                    onFocus={(event) => { ensureBlocks(event.currentTarget); }}
+                    onMouseUp={rememberEditorSelection}
+                    onKeyUp={rememberEditorSelection}
+                    style={{ pointerEvents: editorTool === 'text' ? 'auto' : 'none' }}
+                  />
+                  {editorImagePreview && <div className={`editor-image-frame ${editorImageSelected ? 'selected' : ''}`} style={{ left: `${editorImagePosition.x}%`, top: `${editorImagePosition.y}%`, width: `${editorImageSize.width}%`, height: `${editorImageSize.height}%`, transform: 'translate(-50%, -50%)' }}>
+                    <img className="editor-page-photo" src={editorImagePreview} alt={editorImageName || 'Inserted document image'} draggable={false} onLoad={editorImagePreviewLoaded} onClick={() => setEditorImageSelected(true)} onPointerDown={editorImagePointerDown} onPointerUp={editorPagePointerUp} />
+                    {editorImageSelected && <div className="editor-image-resize-handles" aria-label="Resize selected image">
+                      {([['nw', 'top left'], ['n', 'top centre'], ['ne', 'top right'], ['e', 'middle right'], ['se', 'bottom right'], ['s', 'bottom centre'], ['sw', 'bottom left'], ['w', 'middle left']] as const).map(([handle, label]) => <button key={handle} type="button" className={`editor-image-resize-handle handle-${handle}`} title={`Resize from ${label}`} aria-label={`Resize image from ${label}`} onPointerDown={(event) => editorImageResizeStart(event, handle)} onPointerMove={editorImageResizeMove} onPointerUp={editorImageResizeEnd} onPointerCancel={editorImageResizeEnd} />)}
+                    </div>}
+                  </div>}
+                  {editorImageSelected && editorImagePreview && <div className="editor-image-float-tools" style={{ left: `${Math.min(editorImagePosition.x, 78)}%`, top: `${Math.max(3, editorImagePosition.y - 7)}%` }} onPointerDown={(event) => event.stopPropagation()}>
+                    <button title="Crop image" aria-label="Open crop options" onClick={() => setEditorTool('text')}><Crop size={14} /></button>
+                    <button title="Rotate image 90 degrees" aria-label="Rotate image 90 degrees" onClick={() => setEditorImageRotation((rotation) => (rotation + 90) % 360)}><RotateCw size={14} /></button>
+                    <button title="Align image left" aria-label="Align image left" onClick={() => setEditorImagePosition((position) => ({ ...position, x: editorImageSize.width / 2 }))}><AlignLeft size={14} /></button>
+                    <button title="Center image" aria-label="Center image" onClick={() => setEditorImagePosition((position) => ({ ...position, x: 50 }))}><AlignCenter size={14} /></button>
+                    <button title="Align image right" aria-label="Align image right" onClick={() => setEditorImagePosition((position) => ({ ...position, x: 100 - editorImageSize.width / 2 }))}><AlignRight size={14} /></button>
+                    <button title="Remove image" aria-label="Remove image" onClick={() => { setEditorImageSource(''); setEditorImageSelected(false); }}><Trash2 size={14} /></button>
+                  </div>}
+                  <canvas className={`editor-page-drawing ${editorTool !== 'text' ? 'interactive' : ''}`} ref={drawingCanvasRef} aria-label="Drawing and highlighter canvas" onPointerDown={startEditorStroke} onPointerMove={continueEditorStroke} onPointerUp={endEditorStroke} onPointerCancel={endEditorStroke} onPointerLeave={endEditorStroke} style={{ pointerEvents: editorTool === 'text' ? 'none' : 'auto' }} />
+                </div> : null}
+              {!hasPdfCanvas && (pdfSourceUrl || pdfOutput?.file.type === 'application/pdf') && <iframe className="editor-pdf-frame" src={pdfOutput?.url || pdfSourceUrl} title="Preview of the selected PDF" />}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               {pdfBusy && <div className="pdf-processing-overlay" role="status" aria-live="polite">
                 <span className="pdf-processing-spinner"><RefreshCw className="spin" size={22} /></span>
                 <b>{pdfProcessingMessage || 'Preparing your document…'}</b>
@@ -2564,11 +4071,40 @@ export default function App() {
 
           <aside className="panel pdf-run-panel">
             <div className="section-title"><div><h2>{selectedAction.name}</h2><p>{selectedAction.description}</p></div></div>
+<<<<<<< HEAD
             <label className="file-drop" onClick={() => pdfFileInputRef.current?.click()}>
               <UploadCloud size={22} />
               <b>{pdfFiles.length ? pdfFiles.map((file) => file.name).join(', ') : pdfAction === 'merge' ? 'Choose two or more PDF files' : 'Choose a PDF file'}</b>
               <small>{pdfFiles.length ? `${pdfFiles.length} file${pdfFiles.length === 1 ? '' : 's'} selected` : 'PDF files only'}</small>
             </label>
+=======
+            {pdfAction === 'merge' ? <section className="merge-pdf-uploader" aria-label="PDFs in merge order">
+              {pdfFiles.length > 0 && <>
+                <div className="merge-pdf-list-heading"><b>Files to merge</b><small>{pdfFiles.length} PDF{pdfFiles.length === 1 ? '' : 's'} · shown in merge order</small></div>
+                <ol className="merge-pdf-file-list">
+                  {pdfFiles.map((file, index) => <li className="merge-pdf-file-row" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                    <span className="merge-pdf-index">{index + 1}</span>
+                    <span className="merge-pdf-file-name" title={file.name}>{file.name}<small>{formatSize(file.size)}</small></span>
+                    <div className="merge-pdf-file-actions">
+                      <button type="button" title="Move earlier" aria-label={`Move ${file.name} earlier`} disabled={index === 0} onClick={() => moveMergePdf(index, -1)}>↑</button>
+                      <button type="button" title="Move later" aria-label={`Move ${file.name} later`} disabled={index === pdfFiles.length - 1} onClick={() => moveMergePdf(index, 1)}>↓</button>
+                      <button type="button" className="remove-page-button" title="Remove PDF" aria-label={`Remove ${file.name}`} onClick={() => removeMergePdf(index)}><X size={14} /></button>
+                    </div>
+                  </li>)}
+                </ol>
+              </>}
+              <button type="button" className="file-drop merge-pdf-add" onClick={() => pdfFileInputRef.current?.click()}>
+                <UploadCloud size={20} />
+                <b>{pdfFiles.length ? '+ Insert Another PDF' : 'Choose First PDF'}</b>
+                <small>{pdfFiles.length ? 'Add one PDF at a time' : 'Select a PDF to start your merge'}</small>
+              </button>
+              {pdfFiles.length < 2 && <small className="merge-pdf-requirement">Add at least two PDFs to enable merging.</small>}
+            </section> : <label className="file-drop" onClick={() => pdfFileInputRef.current?.click()}>
+              <UploadCloud size={22} />
+              <b>{pdfFiles.length ? pdfFiles.map((file) => file.name).join(', ') : 'Choose a PDF file'}</b>
+              <small>{pdfFiles.length ? `${pdfFiles.length} file${pdfFiles.length === 1 ? '' : 's'} selected` : 'PDF files only'}</small>
+            </label>}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
             {editorPdfFile && <div className="editor-page-navigation">
               <button disabled={pdfRendering || pdfPageNumber <= 1} onClick={() => changePdfPage(pdfPageNumber - 1)}>Previous</button>
               <span>{pdfRendering ? 'Opening…' : `${pdfPageNumber} / ${pdfPageCount}`}</span>
@@ -2608,7 +4144,11 @@ export default function App() {
               </label>}
             </>}
             {pdfAction === 'flip' && <label className="field-label">Flip direction<select value={pdfFlipDirection} onChange={(event) => setPdfFlipDirection(event.target.value as 'horizontal' | 'vertical')}><option value="horizontal">Horizontal · mirror left to right</option><option value="vertical">Vertical · mirror top to bottom</option></select></label>}
+<<<<<<< HEAD
             <button className="primary full-button" disabled={pdfBusy || !token} onClick={() => void runPdfAction()}>{pdfBusy ? 'Working…' : 'Run operation'}</button>
+=======
+            <button className="primary full-button" disabled={pdfBusy || !token || (pdfAction === 'merge' && pdfFiles.length < 2)} onClick={() => void runPdfAction()}>{pdfBusy ? 'Working…' : 'Run operation'}</button>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
             {!token && <p className="inline-hint">Sign in to run backend PDF operations.</p>}
             <hr className="editor-workspace-divider" />
             <div className="section-title"><div><h2>Page tools</h2><p>Type, mark up, and place a picture on your page.</p></div></div>
@@ -2624,10 +4164,17 @@ export default function App() {
             <input ref={imageFileInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => { void loadEditorImage(event.target.files?.[0]); event.target.value = ''; }} />
             {editorImagePreview && editorImageSelected && <>
               <p className="editor-file-note">Selected: {editorImageName}. Drag it on the page, or choose crop, rotate, and alignment options.</p>
+<<<<<<< HEAD
               <label className="editor-range-label">Crop left<input type="range" min="0" max={95-editorCropRight} value={editorCropLeft} onChange={(event) => setEditorCropLeft(Number(event.target.value))} /></label>
               <label className="editor-range-label">Crop right<input type="range" min="0" max={95-editorCropLeft} value={editorCropRight} onChange={(event) => setEditorCropRight(Number(event.target.value))} /></label>
               <label className="editor-range-label">Crop top<input type="range" min="0" max={95-editorCropBottom} value={editorCropTop} onChange={(event) => setEditorCropTop(Number(event.target.value))} /></label>
               <label className="editor-range-label">Crop bottom<input type="range" min="0" max={95-editorCropTop} value={editorCropBottom} onChange={(event) => setEditorCropBottom(Number(event.target.value))} /></label>
+=======
+              <label className="editor-range-label">Crop left<input type="range" min="0" max={95 - editorCropRight} value={editorCropLeft} onChange={(event) => setEditorCropLeft(Number(event.target.value))} /></label>
+              <label className="editor-range-label">Crop right<input type="range" min="0" max={95 - editorCropLeft} value={editorCropRight} onChange={(event) => setEditorCropRight(Number(event.target.value))} /></label>
+              <label className="editor-range-label">Crop top<input type="range" min="0" max={95 - editorCropBottom} value={editorCropTop} onChange={(event) => setEditorCropTop(Number(event.target.value))} /></label>
+              <label className="editor-range-label">Crop bottom<input type="range" min="0" max={95 - editorCropTop} value={editorCropBottom} onChange={(event) => setEditorCropBottom(Number(event.target.value))} /></label>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               <div className="editor-tool-group">
                 <button onClick={() => setEditorImageRotation((rotation) => (rotation + 270) % 360)}><RotateCw size={14} /> Rotate left</button>
                 <button onClick={() => setEditorImageRotation((rotation) => (rotation + 90) % 360)}><RotateCw size={14} /> Rotate right</button>
@@ -2881,6 +4428,13 @@ export default function App() {
     if (!selectedAdvancedTool) return null;
     const config = advancedToolConfigs[selectedAdvancedTool.toLowerCase()];
     if (!config) return null;
+<<<<<<< HEAD
+=======
+    const lowered = selectedAdvancedTool.toLowerCase();
+    if (lowered === 'ocr pdf') return <OcrPanel token={token} onUseText={(text) => void useOcrTextWithAi(text)} />;
+    if (lowered === 'request signature') return <SignatureRequestPanel token={token} documents={documents} onChanged={() => setHistoryTick((value) => value + 1)} onOpenDocument={(id) => { const found = documents.find((item) => item.id === id); if (found) void openDocument(found); else void loadDocuments(); }} />;
+    if (lowered === 'pdf annotator') return <section className="panel advanced-tool-panel"><div className="conversion-heading"><div><h2>PDF Annotator</h2><p>{config.description}</p></div></div>{!token ? <p className="inline-hint">Sign in to annotate documents.</p> : <div className="vx-form-grid"><label className="vx-field vx-wide">Choose a PDF from your workspace<select value="" onChange={(event) => { const found = documents.find((item) => String(item.id) === event.target.value); if (found) setAnnotateTarget(found); }}><option value="">Select a document…</option>{documents.filter((item) => item.name.toLowerCase().endsWith('.pdf')).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>}</section>;
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     const multiple = config.fileCount === 2;
     const accepts = config.mode === 'ai' ? '.pdf,.docx,.txt,.md' : '.pdf';
     const requiresProvider = config.mode === 'provider-required';
@@ -2888,6 +4442,7 @@ export default function App() {
       <section className="panel conversion-panel advanced-tool-panel">
         <div className="section-title">
           <div><h2>{selectedAdvancedTool}</h2><p>{config.description}</p></div>
+<<<<<<< HEAD
           <button onClick={() => {
             if (advancedOutput) URL.revokeObjectURL(advancedOutput.url);
             setSelectedAdvancedTool(null);
@@ -2897,6 +4452,42 @@ export default function App() {
             setAdvancedError('');
             setAdvancedNotice('');
           }}>Clear selection</button>
+=======
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {advancedFiles.length > 0 && (
+              <label className="button secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', margin: 0 }}>
+                Insert another PDF
+                <input type="file" accept={accepts} multiple={multiple} style={{ display: 'none' }} onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  event.target.value = '';
+                  if (files.some((file) => file.size > 50 * 1024 * 1024)) {
+                    setAdvancedError('Each file must be 50 MB or smaller.');
+                    return;
+                  }
+                  if (multiple) {
+                    setAdvancedFiles((current) => [...current, ...files].slice(-2));
+                  } else if (files.length > 0) {
+                    setAdvancedFiles(files);
+                  }
+                  setAdvancedError('');
+                  setAdvancedNotice('');
+                  if (advancedOutput) URL.revokeObjectURL(advancedOutput.url);
+                  setAdvancedOutput(null);
+                  setAdvancedTextOutput('');
+                }} />
+              </label>
+            )}
+            <button onClick={() => {
+              if (advancedOutput) URL.revokeObjectURL(advancedOutput.url);
+              setSelectedAdvancedTool(null);
+              setAdvancedFiles([]);
+              setAdvancedOutput(null);
+              setAdvancedTextOutput('');
+              setAdvancedError('');
+              setAdvancedNotice('');
+            }}>Clear selection</button>
+          </div>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         </div>
         {requiresProvider ? <p className="ai-error" role="status">{config.description}</p> : <>
           <label className="file-drop conversion-file-picker">
@@ -2969,7 +4560,17 @@ export default function App() {
     return (
       <>
         <PageHeading eyebrow="CONVERT & ORGANIZE" title={page} subtitle="Search the complete tool catalogue. Working tools are marked and connected to the backend." />
+<<<<<<< HEAD
         {selectedAdvancedTool ? renderAdvancedToolPanel() : scanMode ? renderScanPanel() : renderConversionPanel()}
+=======
+        {inlineTool ? (
+          !token ? <section className="panel inline-tool"><p className="inline-hint">Sign in to use this tool.</p><button onClick={() => setInlineTool(null)}>Close</button></section>
+            : inlineTool.type === 'pdf' ? <InlinePdfTools key={inlineTool.kind} kind={inlineTool.kind} token={token} onClose={() => setInlineTool(null)} onSaved={() => void loadDocuments()} />
+            : inlineTool.type === 'summarize' ? <InlineSummarizer token={token} onClose={() => setInlineTool(null)} />
+            : inlineTool.type === 'edit' ? <InlineEditPdf token={token} onClose={() => setInlineTool(null)} onSaved={() => void loadDocuments()} />
+            : <DocumentEditor token={token} onClose={() => setInlineTool(null)} />
+        ) : selectedAdvancedTool ? renderAdvancedToolPanel() : scanMode ? renderScanPanel() : renderConversionPanel()}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         <div className="search-bar"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search documents, tools or features..." /></div>
         <div className="category-tabs" role="tablist" aria-label="Tool categories">
           {['All tools', ...Object.keys(groups)].map((item) => (
@@ -2983,7 +4584,26 @@ export default function App() {
             const toolName = item.name.toLowerCase();
             const advancedConfig = advancedToolConfigs[toolName];
             const providerRequired = advancedConfig?.mode === 'provider-required';
+<<<<<<< HEAD
             const supported = Boolean(conversion)
+=======
+            const inlineKinds: Record<string, InlineKind> = {
+              'merge pdf': 'merge', 'split pdf': 'split', 'rotate pdf': 'rotate', 'remove pages': 'remove-pages',
+              'extract pages': 'extract-pages', 'organize pdf': 'organize', 'protect pdf': 'protect', 'unlock pdf': 'unlock',
+              'compress pdf': 'compress', 'flip pdf': 'flip', 'read pdf': 'read', 'pdf reader': 'read',
+            };
+            const otherInline: Record<string, 'summarize' | 'edit' | 'doc'> = { 'ai pdf summarizer': 'summarize', 'edit pdf': 'edit', 'word and document editor': 'doc' };
+            const goesToPage: Record<string, PageName> = {
+              'ai documents': 'AI Documents',
+              'document history': 'Document History',
+              'pdf translator': 'Language Bridge',
+              'humanizer': 'Humanizer',
+            };
+            const builtIn = Boolean(inlineKinds[toolName] || otherInline[toolName] || goesToPage[toolName] || toolName === 'vertex ai assistant');
+            const supported = Boolean(conversion)
+              || builtIn
+              || toolName === 'share pdf'
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               || (capability?.supported ?? false)
               || Boolean(advancedConfig && !providerRequired);
             const actionByTool: Record<string, PdfAction> = {
@@ -3003,6 +4623,21 @@ export default function App() {
             const icon = supported ? <FileText size={20} /> : <CircleAlert size={20} />;
             return (
               <button className={`catalogue-card ${supported ? '' : 'not-ready'}`} key={`${item.category}-${item.name}`} onClick={() => {
+<<<<<<< HEAD
+=======
+                setInlineTool(null);
+                if (!conversion) {
+                  if (inlineKinds[toolName] || otherInline[toolName]) {
+                    setSelectedAdvancedTool(null); setScanMode(false); setActiveConversion(null);
+                    setInlineTool(inlineKinds[toolName] ? { type: 'pdf', kind: inlineKinds[toolName] } : { type: otherInline[toolName] });
+                    setPage('Convert');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                  }
+                  if (goesToPage[toolName]) { setPage(goesToPage[toolName]); return; }
+                  if (toolName === 'vertex ai assistant') { setChatOpen(true); return; }
+                }
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 if (conversion) {
                   setSelectedAdvancedTool(null);
                   chooseConversion(conversion);
@@ -3029,7 +4664,17 @@ export default function App() {
                   setPage('PDF Studio');
                   return;
                 }
+<<<<<<< HEAD
                 if (['read pdf', 'pdf reader', 'pdf annotator', 'edit pdf'].includes(toolName)) {
+=======
+                if (toolName === 'share pdf') {
+                  setSelectedAdvancedTool(null);
+                  setScanMode(false);
+                  setPage('Document History');
+                  return;
+                }
+                if (['read pdf', 'pdf reader', 'edit pdf'].includes(toolName)) {
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                   setSelectedAdvancedTool(null);
                   setScanMode(false);
                   setPdfAction(toolName === 'read pdf' || toolName === 'pdf reader' ? 'text' : 'info');
@@ -3054,6 +4699,108 @@ export default function App() {
     );
   }
 
+<<<<<<< HEAD
+=======
+  function renderAdminDashboard() {
+    if (!token || adminAccess === 'signed-out') {
+      return <>
+        <PageHeading eyebrow="ADMINISTRATION" title="Admin Dashboard" subtitle="Platform usage and user activity." />
+        <section className="panel admin-access-state"><ShieldCheck size={24} /><div><h2>Sign in required</h2><p>Sign in to verify administrator access.</p></div><button onClick={() => setPage('Account / Privacy')}>Go to sign in</button></section>
+      </>;
+    }
+    if (adminAccess === 'denied') {
+      return <>
+        <PageHeading eyebrow="ADMINISTRATION" title="Admin Dashboard" subtitle="Platform usage and user activity." />
+        <section className="panel admin-access-state" role="alert">
+          <ShieldCheck size={24} />
+          <div><h2>Access denied</h2><p>Your account does not have administrator access.</p></div>
+          <button onClick={() => setPage('Home / Workspace')}>Return to workspace</button>
+        </section>
+      </>;
+    }
+    if (adminAccess === 'checking' || adminAccess === 'unavailable') {
+      return <>
+        <PageHeading eyebrow="ADMINISTRATION" title="Admin Dashboard" subtitle="Platform usage and user activity." />
+        <section className="panel admin-access-state" role="status">
+          <ShieldCheck size={24} />
+          <div><h2>{adminAccess === 'checking' ? 'Verifying access…' : 'Could not verify access'}</h2><p>{adminAccess === 'checking' ? 'Checking your account with the administrator API.' : adminStatsError || 'Please try again.'}</p></div>
+          {adminAccess === 'unavailable' && <button onClick={() => setAdminRefreshVersion((version) => version + 1)}>Try again</button>}
+        </section>
+      </>;
+    }
+
+    const stats = adminStats;
+    const statCards = stats ? [
+      { label: 'Total Users', value: stats.total_users, icon: Users },
+      { label: 'Documents', value: stats.total_documents, icon: FileText },
+      { label: 'PDF Operations', value: stats.total_pdf_operations, icon: Combine },
+      { label: 'Translations', value: stats.total_translations, icon: Languages },
+      { label: 'AI Assistant Usage', value: stats.total_ai_usage, icon: Sparkles },
+    ] : [];
+    const pagination = (result: { total: number } | null, offset: number, setOffset: (offset: number) => void) => {
+      const total = result?.total ?? 0;
+      const first = total === 0 ? 0 : offset + 1;
+      const last = Math.min(offset + 10, total);
+      return <div className="admin-pagination">
+        <span>{first}–{last} of {total}</span>
+        <div>
+          <button aria-label="Previous page" disabled={offset <= 0 || adminDataBusy} onClick={() => setOffset(Math.max(0, offset - 10))}>Previous</button>
+          <button aria-label="Next page" disabled={offset + 10 >= total || adminDataBusy} onClick={() => setOffset(offset + 10)}>Next</button>
+        </div>
+      </div>;
+    };
+    const tableRows = (events: AdminActivity[], withEmail: boolean) => events.length ? <div className="admin-table-scroll"><table className="admin-table">
+      <thead><tr>{withEmail && <th>User</th>}<th>Action</th><th>Entity</th><th>Date and time</th></tr></thead>
+      <tbody>{events.map((event) => <tr key={event.id}>
+        {withEmail && <td>{event.user_email || `User ${event.user_id}`}</td>}
+        <td><span className="admin-action-tag">{event.action}</span></td>
+        <td>{event.entity_type}</td>
+        <td>{formatAdminTimestamp(event.created_at)}</td>
+      </tr>)}</tbody>
+    </table></div> : <div className="empty-state" role={adminDataBusy ? 'status' : undefined}>{adminDataBusy ? 'Loading activity…' : 'No activity to show yet.'}</div>;
+
+    return <>
+      <div className="admin-page-heading">
+        <PageHeading eyebrow="ADMINISTRATION" title="Admin Dashboard" subtitle="A clear view of platform usage and recent user activity." />
+        <button className="admin-refresh-button" disabled={adminDataBusy} onClick={() => setAdminRefreshVersion((version) => version + 1)}><RefreshCw size={15} /> Refresh</button>
+      </div>
+      {adminStatsError && <p className="admin-inline-error" role="alert">{adminStatsError}</p>}
+      {adminDataError && <p className="admin-inline-error" role="alert">{adminDataError}</p>}
+      <section className="admin-stat-grid" aria-label="Platform statistics">
+        {statCards.map(({ label, value, icon: Icon }) => <article className="admin-stat-card" key={label}>
+          <span><Icon size={18} /></span><div><small>{label}</small><b>{value.toLocaleString()}</b></div>
+        </article>)}
+        {!stats && <div className="empty-state">Statistics are temporarily unavailable.</div>}
+      </section>
+      {stats?.historical_activity_limited && <p className="admin-history-note">{stats.historical_activity_note}</p>}
+
+      <section className="panel admin-panel">
+        <div className="admin-section-heading"><div><span className="eyebrow">PLATFORM</span><h2>Recent activity</h2><p>Newest tracked events across user accounts.</p></div>{adminDataBusy && <small role="status">Refreshing…</small>}</div>
+        {tableRows(adminActivityPage?.items || [], true)}
+        {pagination(adminActivityPage, adminActivityOffset, setAdminActivityOffset)}
+      </section>
+
+      <section className="panel admin-panel">
+        <div className="admin-section-heading"><div><span className="eyebrow">ACCOUNTS</span><h2>Users</h2><p>Select a user to view their tracked activity.</p></div></div>
+        {adminUsersPage?.items.length ? <div className="admin-table-scroll"><table className="admin-table admin-users-table">
+          <thead><tr><th>User ID</th><th>Email</th><th>Activity</th></tr></thead>
+          <tbody>{adminUsersPage.items.map((adminUser) => <tr key={adminUser.id} className={selectedAdminUser?.id === adminUser.id ? 'selected' : ''}>
+            <td>{adminUser.id}</td><td>{adminUser.email}</td>
+            <td><button className="admin-view-user" onClick={() => { setSelectedAdminUser(adminUser); setAdminUserActivityOffset(0); setAdminUserActivityPage(null); }}>View activity <ChevronDown size={14} /></button></td>
+          </tr>)}</tbody>
+        </table></div> : <div className="empty-state" role={adminDataBusy ? 'status' : undefined}>{adminDataBusy ? 'Loading users…' : 'No users to show.'}</div>}
+        {pagination(adminUsersPage, adminUsersOffset, setAdminUsersOffset)}
+      </section>
+
+      {selectedAdminUser && <section className="panel admin-panel admin-user-history">
+        <div className="admin-section-heading"><div><span className="eyebrow">USER HISTORY</span><h2>{selectedAdminUser.email}</h2><p>Activity for user ID {selectedAdminUser.id}.</p></div><button onClick={() => { setSelectedAdminUser(null); setAdminUserActivityPage(null); }}>Close</button></div>
+        {tableRows(adminUserActivityPage?.items || [], false)}
+        {pagination(adminUserActivityPage, adminUserActivityOffset, setAdminUserActivityOffset)}
+      </section>}
+    </>;
+  }
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   function renderPage() {
     switch (page) {
       case 'Home / Workspace':
@@ -3067,6 +4814,17 @@ export default function App() {
                 <div className="welcome-actions">
                   <label className="primary button-label"><UploadCloud size={17} /> Upload a document<input type="file" onChange={(event) => { void uploadDocument(event.target.files?.[0]); event.target.value = ''; }} /></label>
                   <button onClick={() => setPage('PDF Studio')}>Open PDF Studio <ChevronDown className="chevron-side" size={16} /></button>
+<<<<<<< HEAD
+=======
+                  <button onClick={() => {
+                    resetEditor();
+                    setEditorImagePreview('');
+                    setPdfPageImage('');
+                    setPdfSourceUrl('');
+                    setPdfAction('info');
+                    setPage('PDF Studio');
+                  }}><FilePlus2 size={16} /> Blank Document</button>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 </div>
               </div>
               <div className="welcome-art" aria-hidden="true"><span>{companion.emoji}</span><small>Here to help</small></div>
@@ -3092,14 +4850,28 @@ export default function App() {
       case 'Convert':
         return renderTools();
       case 'Templates':
+<<<<<<< HEAD
         return renderTemplates();
       case 'Document History':
         return renderDocumentHistory();
+=======
+        return (
+          <section className="page-section">
+            <PageHeading eyebrow="TEMPLATES" title="Start from a professional template" subtitle="Pick a design, edit it right on the page, then save it as PDF or Word. Resumes include a live ATS score." />
+            <TemplateStudio token={token ?? ''} userName={user?.name ?? ''} userEmail={user?.email ?? ''} />
+          </section>
+        );
+      case 'Document History':
+        return renderDocumentHistory();
+      case 'Admin Dashboard':
+        return renderAdminDashboard();
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       case 'AI Documents':
         return renderAiDocuments();
       case 'Language Bridge':
         return (
           <>
+<<<<<<< HEAD
             <PageHeading eyebrow="LANGUAGE BRIDGE" title="Translate your way" subtitle="Write in any supported language or upload a document, then choose the language you want." />
             <section className="panel translation-panel">
               <div className="translation-language-row">
@@ -3132,24 +4904,239 @@ export default function App() {
               </div>
               {translationBusy && translationFile && <p className="translation-progress" role="status">Reading and translating the document in shorter sections. You can stay on this page while it finishes.</p>}
               {translationResult && <section className="translation-result"><b>{translationFile ? 'Translated document' : 'Translation'}</b><pre>{translationResult}</pre></section>}
+=======
+            <PageHeading eyebrow="LANGUAGE BRIDGE" title="Language Bridge" subtitle="Translate, edit and compare Tamil and English documents." />
+            <div className="language-bridge-page">
+              <section className="panel language-bridge-upload-card">
+                <h3>Upload Document</h3>
+                <p>Upload your document to begin the translation process.</p>
+                <label className="language-bridge-dropzone">
+                  <UploadCloud size={22} />
+                  <span>{translationFile ? translationFile.name : 'Choose a document'}</span>
+                  <small>PDF, DOCX or TXT · Maximum 20 MB</small>
+                  <input type="file" accept={AI_READABLE_ACCEPT} onChange={(event) => { const file = event.target.files?.[0] ?? null; setTranslationFile(file); setTranslationSource('auto'); setTranslationSourceLocked(false); setTranslationText(''); setTranslationResult(''); setTranslationRevised(''); setTranslationOutput(null); setTranslationMessage(''); event.target.value = ''; if (file) void extractBridgeText(file); }} />
+                </label>
+              </section>
+
+              <section className="panel language-bridge-settings">
+                <div className="language-bridge-setting-row">
+                  <label className="field-label">Source Language
+                    <select value={translationSource} onChange={(event) => { setTranslationSource(event.target.value); setTranslationSourceLocked(event.target.value !== 'auto'); setTranslationResult(''); setTranslationRevised(''); setTranslationOutput(null); setTranslationMessage(''); }}>
+                      <option value="auto">Detect language</option>
+                      {languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                    </select>
+                  </label>
+                  <div className="language-bridge-arrow-wrap" aria-hidden="true"><ArrowLeftRight size={18} /></div>
+                  <label className="field-label">Target Language
+                    <select value={translationTarget} onChange={(event) => { setTranslationTarget(event.target.value); setTranslationResult(''); setTranslationRevised(''); setTranslationOutput(null); setTranslationMessage(''); }}>
+                      {languages.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div className="vx-lang-check">
+                  <button type="button" disabled={languageCheck.busy} onClick={() => void checkLanguageAvailability()}>{languageCheck.busy ? 'Checking…' : 'Check language availability'}</button>
+                  {languageCheck.message && <small role="status">{languageCheck.message}</small>}
+                  {languageCheck.items.length > 0 && <ul>{languageCheck.items.map((item) => <li key={item.code} className={item.status}><b>{item.name}</b> <span>{item.status === 'available' ? 'Available' : item.status === 'unverified' ? 'Not verified' : 'Not reliable'}</span><small>{item.detail}</small></li>)}</ul>}
+                </div>
+              </section>
+
+              <div className="language-bridge-output-row">
+                <article className="panel language-bridge-output-card">
+                  <div className="language-bridge-card-header">
+                    <h4>Original {languages.find(([code]) => code === translationSource)?.[1] ?? 'Text'}</h4>
+                    <ExportMenu token={token} text={translationText} title="original-text" source="translation" className="language-bridge-download-button" onMessage={(message) => setTranslationMessage(message)} />
+                  </div>
+                  <textarea className="language-bridge-editor" aria-label="Original text" value={translationText} onChange={(event) => { const text = event.target.value; translationFileLoadId.current += 1; setTranslationExtractBusy(false); setTranslationText(text); setTranslationFile(null); if (!translationSourceLocked) setTranslationSource(detectBridgeLanguage(text) ?? 'auto'); setTranslationResult(''); setTranslationRevised(''); setTranslationOutput(null); setTranslationMessage(''); }} maxLength={20000} placeholder={translationFile ? `Extracting text from ${translationFile.name}…` : 'Type or paste the original text here…'} />
+                </article>
+
+                <article className="panel language-bridge-output-card">
+                  <div className="language-bridge-card-header">
+                    <h4>{languages.find(([code]) => code === translationTarget)?.[1] ?? 'Translation'}</h4>
+                    <ExportMenu token={token} text={translationResult} title="translated-text" source="translation" className="language-bridge-download-button" onMessage={(message) => setTranslationMessage(message)} />
+                  </div>
+                  <textarea className="language-bridge-editor" aria-label="Translated text" value={translationResult} onChange={(event) => { setTranslationResult(event.target.value); setTranslationRevised(''); setTranslationMessage(''); }} maxLength={20000} placeholder="Translation will appear here. You can edit it before translating it back." />
+                </article>
+              </div>
+
+              <div className="language-bridge-action-row">
+                <button type="button" className="language-bridge-primary-action" disabled={translationBusy || translationExtractBusy || (!translationText.trim() && !translationFile)} onClick={() => void runTranslation()}>
+                  {translationBusy ? 'Translating…' : `Translate to ${languages.find(([code]) => code === translationTarget)?.[1] ?? 'target language'}`} <ArrowLeftRight size={15} />
+                </button>
+                {(translationBusy || translationExtractBusy || (!translationText.trim() && !translationFile)) && <small className="language-bridge-hint" role="status">{translationBusy ? 'Translating — larger documents can take a little while.' : translationExtractBusy ? 'Reading your file…' : !token ? 'Sign in, then type or upload something to translate.' : 'Type or paste some text, or upload a file, to enable Translate.'}</small>}
+                <button type="button" className="language-bridge-primary-action" disabled={translationBusy || !translationResult.trim() || (translationSource === 'auto' && !detectBridgeLanguage(translationText))} onClick={() => void runTranslation(translationResult, translationTarget, translationSource === 'auto' ? detectBridgeLanguage(translationText) ?? 'auto' : translationSource, true)}>
+                  Translate edited version back to {languages.find(([code]) => code === translationSource)?.[1] ?? 'source language'} <ArrowLeftRight size={15} />
+                </button>
+              </div>
+
+              <section className="panel language-bridge-revised-card">
+                <div className="language-bridge-card-header">
+                  <h3>Revised {languages.find(([code]) => code === translationSource)?.[1] ?? 'Text'}</h3>
+                  <ExportMenu token={token} text={translationRevised} title="revised-text" source="translation" className="language-bridge-download-button" onMessage={(message) => setTranslationMessage(message)} />
+                </div>
+                <textarea className="language-bridge-editor language-bridge-revised-editor" aria-label="Revised translation" value={translationRevised} onChange={(event) => setTranslationRevised(event.target.value)} maxLength={20000} placeholder="The revised translation will appear here after you translate your edited version back." />
+                <div className="language-bridge-decision-row">
+                  <button type="button" className="language-bridge-accept-button" disabled={!translationRevised.trim()} onClick={() => { setTranslationText(translationRevised); setTranslationResult(''); setTranslationRevised(''); setTranslationMessage('Revised translation accepted as the original text.'); }}><Check size={14} /> Accept Changes</button>
+                  <button type="button" className="language-bridge-reject-button" disabled={!translationRevised.trim()} onClick={() => { setTranslationRevised(''); setTranslationMessage('Revised translation rejected.'); }}><X size={14} /> Reject Changes</button>
+                </div>
+              </section>
+
+              <div className="language-bridge-notice">
+                <span className="language-bridge-notice-icon"><CircleAlert size={18} /></span>
+                <div>
+                  <strong>Important Document Notice</strong>
+                  <p>For legal, financial and official documents, always verify the translated content before using it.</p>
+                </div>
+              </div>
+
+              {translationBusy && translationFile && <p className="translation-progress" role="status">Reading and translating the document in shorter sections. You can stay on this page while it finishes.</p>}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               {translationOutput && <div className="translation-output-actions">
                 <button className="primary" onClick={downloadTranslationOutput}><Download size={15} /> Download translated file</button>
                 <button disabled={!token || translationSaveBusy} onClick={() => void saveTranslationOutput()}><Save size={15} /> {translationSaveBusy ? 'Saving…' : 'Save to Document History'}</button>
                 <button className="discard-button" onClick={clearTranslationOutput}><Trash2 size={15} /> Delete result</button>
               </div>}
               {translationMessage && <p className="operation-notice" role="status">{translationMessage}</p>}
+<<<<<<< HEAD
               {!token && <p className="inline-hint">Sign in and configure an LLM_API_KEY in the backend to translate.</p>}
             </section>
+=======
+              {!token && <p className="inline-hint">Sign in to translate your documents.</p>}
+            </div>
+          </>
+        );
+      case 'Humanizer':
+        return (
+          <>
+            <div className="humanizer-page">
+              <section className="humanizer-hero">
+                <span className="humanizer-hero-icon"><Sparkles size={26} /></span>
+                <div>
+                  <h1>AI Humanizer</h1>
+                  <p>Make your AI-generated or formal text sound natural and human-like.</p>
+                </div>
+                <span className="humanizer-support"><Check size={14} /> Supports Files &amp; Text</span>
+              </section>
+
+              <section className="humanizer-source-panel">
+                <label className={`humanizer-upload-zone ${humanizerFileBusy ? 'loading' : ''}`}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void loadHumanizerFile(file); }}>
+                  <UploadCloud size={48} />
+                  <span className="humanizer-upload-copy">
+                    <b>{humanizerFile?.name || 'Upload your document'}</b>
+                    <small>{humanizerFileBusy ? 'Extracting text…' : 'Drag and drop or browse files'}</small>
+                    <span className="humanizer-file-types"><i>PDF</i><i>DOCX</i><i>TXT</i></span>
+                  </span>
+                  <input type="file" accept={AI_READABLE_ACCEPT} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void loadHumanizerFile(file); }} />
+                </label>
+                <label className="humanizer-paste-area">Or paste your text
+                  <small>Alternative input</small>
+                  <textarea value={humanizerInput} onChange={(event) => { humanizerFileRequestId.current += 1; setHumanizerFileBusy(false); setHumanizerFile(null); setHumanizerInput(event.target.value); setHumanizerOutput(''); setHumanizerError(''); setHumanizerNotice(''); }} maxLength={20000} placeholder="Paste content here…" />
+                </label>
+              </section>
+
+              <section className="humanizer-options">
+                <div className="humanizer-style-select">
+                  <b><Sparkles size={16} /> Writing Style:</b>
+                  <div className="humanizer-style-buttons" role="group" aria-label="Writing style">
+                    {([
+                      ['simple', 'Simple', Sparkles],
+                      ['professional', 'Professional', ShieldCheck],
+                      ['conversational', 'Conversational', MessageCircle],
+                      ['academic', 'Academic', BookOpen],
+                    ] as const).map(([style, label, Icon]) => (
+                      <button type="button" className={humanizerWritingStyle === style ? 'active' : ''} aria-pressed={humanizerWritingStyle === style} key={style} onClick={() => setHumanizerWritingStyle(style)}>
+                        <Icon size={14} /> {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="humanizer-strength">
+                  <b><Settings2 size={16} /> Humanization Strength:</b>
+                  <input type="range" min="1" max="5" step="1" value={humanizerStrength} aria-label="Humanization strength" onChange={(event) => setHumanizerStrength(Number(event.target.value))} />
+                  <span><small>Light Editing</small><small>Deep Rewriting</small></span>
+                </label>
+                <button className="humanizer-run-button" disabled={humanizerBusy || humanizerFileBusy || !humanizerInput.trim()} onClick={() => void runHumanizer()}>
+                  <Sparkles size={17} /> {humanizerBusy ? 'Humanizing…' : 'Humanize Document'}
+                </button>
+              </section>
+
+              <section className="humanizer-results">
+                <article className="humanizer-result-card">
+                  <header>
+                    <b><FileText size={17} /> Original Text</b>
+                    <span>Word Count: {countWords(humanizerInput)}</span>
+                  </header>
+                  <div className="humanizer-result-content">{humanizerInput || 'Your original text will appear here.'}</div>
+                </article>
+                <span className="humanizer-result-arrow" aria-hidden="true"><ArrowLeftRight size={25} /></span>
+                <article className="humanizer-result-card humanizer-result-success">
+                  <header>
+                    <b><Check size={17} /> Humanized Result</b>
+                    <span>Word Count: {countWords(humanizerOutput)}</span>
+                  </header>
+                  <div className="humanizer-result-content">{humanizerOutput || 'Your humanized text will appear here.'}</div>
+                </article>
+              </section>
+
+              <section className="humanizer-actions">
+                <div className="humanizer-action-buttons">
+                  <b>You can now:</b>
+                  <button type="button" disabled={!humanizerOutput.trim()} onClick={() => void copyHumanizerOutput()}><Copy size={16} /> Copy Text</button>
+                  <ExportMenu token={token} text={humanizerOutput} title="humanized-text" source="humanizer" onMessage={(message, isError) => { if (isError) { setHumanizerNotice(''); setHumanizerError(message); } else { setHumanizerError(''); setHumanizerNotice(message); } }} />
+                  <button type="button" disabled={humanizerBusy || humanizerFileBusy} onClick={resetHumanizer}><RefreshCw size={15} /> Start Over</button>
+                </div>
+                <p><CircleAlert size={16} /> Your meaning is preserved while making the text more natural and easy to read.</p>
+              </section>
+
+              {humanizerError && <p className="ai-error" role="alert">{humanizerError}</p>}
+              {humanizerNotice && <p className="operation-notice" role="status">{humanizerNotice}</p>}
+              {!token && <p className="inline-hint">Sign in to use Humanizer.</p>}
+            </div>
+          </>
+        );
+      case 'Settings':
+        return (
+          <>
+            <PageHeading eyebrow="SETTINGS" title="Settings" subtitle="Manage your account, workspace appearance, and information about JM Vertex." />
+            <div className="settings-options-grid">
+              <section className="panel settings-option-card">
+                <span className="settings-option-icon"><UserRound size={20} /></span>
+                <h2>Profile / Account settings</h2>
+                <p>Manage your profile, sign-in details, privacy, and account security.</p>
+                {user && <small>Signed in as {user.email}</small>}
+                <button onClick={() => setPage('Account / Privacy')}>Open account settings <ChevronDown size={15} /></button>
+              </section>
+              <section className="panel settings-option-card">
+                <span className="settings-option-icon"><Settings2 size={20} /></span>
+                <h2>Theme</h2>
+                <p>Choose your workspace colour theme and assistant companion.</p>
+                <small>Current theme: {themeDef(theme).name}</small>
+                <button onClick={() => setPage('Companion & Themes')}>Choose theme <ChevronDown size={15} /></button>
+              </section>
+              <section className="panel settings-option-card">
+                <span className="settings-option-icon"><FileText size={20} /></span>
+                <h2>About JM Vertex</h2>
+                <p>Learn about JM Vertex Technologies and the Vertex Docs workspace.</p>
+                <button onClick={() => setPage('About JM Vertex')}>About JM Vertex <ChevronDown size={15} /></button>
+              </section>
+            </div>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           </>
         );
       case 'Account / Privacy':
         return (
           <>
+<<<<<<< HEAD
+=======
+            <button className="settings-back-button" onClick={() => setPage('Settings')}><ArrowLeftRight size={14} /> Settings</button>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
             <PageHeading eyebrow="ACCOUNT & PRIVACY" title={user ? 'Account & security' : 'Sign in to your workspace'} subtitle={user ? 'Your identity, session and document privacy in one place.' : 'Create a personal account or sign in to return to your private workspace.'} />
             {user ? <div className="account-page-content">
               <section className="panel account-profile-card">
                 <div className="account-profile-avatar">{companion.emoji}</div>
                 <div className="account-profile-info"><span className="eyebrow">PERSONAL ACCOUNT</span><h2>{user.name}</h2><p>{user.email}</p></div>
+<<<<<<< HEAD
                 <span className="account-active-badge"><Check size={14}/> Active</span>
                 <button className="account-signout" onClick={signOut}><LogOut size={16}/>Sign out</button>
               </section>
@@ -3172,12 +5159,40 @@ export default function App() {
               <form className="auth-panel panel" onSubmit={(event)=>{event.preventDefault();void submitAuth();}}>
                 <div className="auth-tabs"><button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setNotice(''); }}>Sign in</button><button type="button" className={authMode === 'signup' ? 'active' : ''} onClick={() => { setAuthMode('signup'); setNotice(''); }}>Create account</button></div>
                 <div><h2 className="auth-form-title">{authMode==='signup'?'Create your account':'Welcome back'}</h2><p className="auth-form-subtitle">{authMode==='signup'?'Use any valid email address and create a password.':'Use the email and password you registered with.'}</p></div>
+=======
+                <span className="account-active-badge"><Check size={14} /> Active</span>
+                <button className="account-signout" onClick={signOut}><LogOut size={16} />Sign out</button>
+              </section>
+              <div className="account-security-grid">
+                <section className="panel account-security-card"><span className="account-security-icon"><ShieldCheck size={19} /></span><h3>Your documents are private</h3><p>Files in your workspace are linked to your account. Other signed-in users cannot list, download, or delete them.</p><small>{documents.length} {documents.length === 1 ? 'document' : 'documents'} in your workspace</small></section>
+                <section className="panel account-security-card"><span className="account-security-icon"><LockKeyhole size={19} /></span><h3>Sign-in stays personal</h3><p>Use your own email and password. Sign out on shared devices; your account and saved files remain available when you sign in again.</p><small>Signed in as {user.email}</small></section>
+                <section className="panel account-security-card"><span className="account-security-icon"><Settings2 size={19} /></span><h3>Workspace preferences</h3><p>Your theme, assistant language, and companion are saved to your account.</p><button onClick={() => setPage('Companion & Themes')}>Manage appearance <ChevronDown className="chevron-side" size={14} /></button></section>
+                <section className="panel account-security-card"><span className="account-security-icon"><Sparkles size={19} /></span><h3>AI document processing</h3><p>AI features send the selected document text to the provider configured by this workspace. They require the administrator’s API configuration.</p><small>AI is only used when you request a summary, chat, or translation.</small></section>
+              </div>
+            </div> : <div className="auth-page-layout">
+              <section className="auth-welcome-card">
+                <span className="auth-welcome-icon"><ShieldCheck size={23} /></span>
+                <span className="eyebrow">YOUR PRIVATE WORKSPACE</span>
+                <h2>Pick up right where you left off.</h2>
+                <p>Your uploaded documents and saved preferences are tied to your account—not to a temporary browser session.</p>
+                <div className="auth-benefit"><Check size={15} /><span>Sign in again to find your files and settings</span></div>
+                <div className="auth-benefit"><Check size={15} /><span>Every account sees only its own documents</span></div>
+                <div className="auth-benefit"><Check size={15} /><span>Use any valid email when creating your account</span></div>
+              </section>
+              <form className="auth-panel panel" onSubmit={(event) => { event.preventDefault(); void submitAuth(); }}>
+                <div className="auth-tabs"><button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setNotice(''); }}>Sign in</button><button type="button" className={authMode === 'signup' ? 'active' : ''} onClick={() => { setAuthMode('signup'); setNotice(''); }}>Create account</button></div>
+                <div><h2 className="auth-form-title">{authMode === 'signup' ? 'Create your account' : 'Welcome back'}</h2><p className="auth-form-subtitle">{authMode === 'signup' ? 'Use any valid email address and create a password.' : 'Use the email and password you registered with.'}</p></div>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 {authMode === 'signup' && <label className="field-label">Name<input required minLength={2} maxLength={120} value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="Your name" /></label>}
                 <label className="field-label">Email address<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" /></label>
                 <label className="field-label">Password<input required minLength={8} maxLength={128} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} placeholder="At least 8 characters" /></label>
                 <button className="primary full-button" type="submit">{authMode === 'signup' ? 'Create account' : 'Sign in securely'}</button>
                 {notice && <p className="inline-hint" role="status">{notice}</p>}
+<<<<<<< HEAD
                 <small className="auth-footnote"><LockKeyhole size={13}/> Passwords are stored as secure hashes, never as plain text.</small>
+=======
+                <small className="auth-footnote"><LockKeyhole size={13} /> Passwords are stored as secure hashes, never as plain text.</small>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
               </form>
             </div>}
           </>
@@ -3185,6 +5200,10 @@ export default function App() {
       case 'Companion & Themes':
         return (
           <>
+<<<<<<< HEAD
+=======
+            <button className="settings-back-button" onClick={() => setPage('Settings')}><ArrowLeftRight size={14} /> Settings</button>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
             <PageHeading eyebrow="MAKE VERTEX YOURS" title="Companion & appearance" subtitle="Choose your animated companion and give your workspace a colour palette that feels right." />
             <div className="appearance-grid">
               <section className="panel companion-panel">
@@ -3200,6 +5219,7 @@ export default function App() {
                 {!user && <p className="inline-hint">Your choice is saved on this device. Sign in to sync it to your account.</p>}
               </section>
               <section className="panel themes-panel">
+<<<<<<< HEAD
                 <div className="section-title"><div><h2>Workspace colours</h2><p>Pick a real-world palette, then choose its light or dark look.</p></div></div>
                 <div className="theme-mode-switch" role="group" aria-label="Theme brightness">
                   {(['light', 'dark'] as const).map((mode) => (
@@ -3216,8 +5236,143 @@ export default function App() {
                       {paletteId === item.id && <Check size={17} />}
                     </button>
                   ))}
+=======
+                <div className="section-title"><div><h2>Workspace colours</h2><p>Pick a colour theme. It changes accents, buttons and backgrounds instantly.</p></div></div>
+                <div className="theme-groups">
+                  {(['gradient', 'solid'] as const).map((group) => (
+                    <div key={group}>
+                      <h3 className="theme-group-title">{group === 'gradient' ? 'Gradient themes' : 'Solid themes'}</h3>
+                      <div className="theme-grid">
+                        {themes.filter((item) => item.group === group).map((item) => (
+                          <button className={`theme-tile ${theme === item.id ? 'selected' : ''}`} key={item.id} aria-pressed={theme === item.id} onClick={() => void savePreferences({ theme: item.id })}>
+                            <span className="theme-chip" style={{ background: group === 'gradient' ? `linear-gradient(135deg, ${item.a}, ${item.b})` : item.a }} />
+                            <b>{item.name}</b>
+                            {theme === item.id && <Check className="tile-check" size={16} />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="theme-custom">
+                    <b>Custom colours</b>
+                    <label>Main <input type="color" aria-label="Custom main colour" value={customColours.a} onChange={(event) => { const next = { ...customColours, a: event.target.value }; setCustomColours(next); saveCustomColours(next); void savePreferences({ theme: CUSTOM_THEME }); }} /></label>
+                    <label>Second <input type="color" aria-label="Custom second colour" value={customColours.b} onChange={(event) => { const next = { ...customColours, b: event.target.value }; setCustomColours(next); saveCustomColours(next); void savePreferences({ theme: CUSTOM_THEME }); }} /></label>
+                    <button className={theme === CUSTOM_THEME ? 'active' : ''} onClick={() => void savePreferences({ theme: CUSTOM_THEME })}>Use custom</button>
+                  </div>
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 </div>
                 <p className="theme-confirmation">{notice || 'Your selection updates the workspace immediately.'}</p>
+              </section>
+            </div>
+          </>
+        );
+<<<<<<< HEAD
+    }
+  }
+
+=======
+      case 'About JM Vertex':
+        return (
+          <>
+            <button className="settings-back-button" onClick={() => setPage('Settings')}><ArrowLeftRight size={14} /> Settings</button>
+            <div className="about-jm-page">
+              <section className="about-jm-hero">
+                <div className="about-jm-brand"><img src="/jm-logo.png" alt="JM Vertex Technologies logo" /></div>
+                <div className="about-jm-hero-copy">
+                  <span className="eyebrow">ABOUT THE COMPANY</span>
+                  <h1>JM Vertex Technologies</h1>
+                  <p className="about-jm-tagline">Learn. Build. Grow.</p>
+                  <p>Empowering students and businesses across India.</p>
+                  <a href="https://jmvertextechnologies.com/" target="_blank" rel="noreferrer">Visit jmvertextechnologies.com <ArrowDownToLine size={14} /></a>
+                </div>
+                <a className="about-jm-location" href="https://www.google.com/maps/search/?api=1&query=Pollachi%2C+Tamil+Nadu%2C+India" target="_blank" rel="noopener noreferrer" aria-label="Open Pollachi, Tamil Nadu, India in Google Maps"><FileSearch size={15} /> Pollachi, Tamil Nadu, India</a>
+              </section>
+
+              <section className="about-jm-section">
+                <div className="about-jm-section-heading"><span className="eyebrow">WHO WE ARE</span><h2>Bridging learning and industry</h2></div>
+                <div className="about-jm-overview-grid">
+                  <article className="panel about-jm-mission">
+                    <h3>Our mission</h3>
+                    <p>To bridge the gap between academic learning and industry demands through practical technology training, internships, custom website development, foreign language courses, and end-to-end project building.</p>
+                  </article>
+                  <article className="panel about-jm-founders">
+                    <h3>Our founders</h3>
+                    <div><b>Joshua J</b><span>Founder</span></div>
+                    <div><b>Madhav Adithya S</b><span>Co-Founder</span></div>
+                  </article>
+                </div>
+              </section>
+
+              <section className="about-jm-section">
+                <div className="about-jm-section-heading"><span className="eyebrow">WHAT WE DO</span><h2>Core services</h2><p>Practical programs and technology services designed around real-world outcomes.</p></div>
+                <div className="about-jm-services-grid">
+                  <article className="panel about-jm-service-card">
+                    <span className="about-jm-card-icon"><Sparkles size={19} /></span>
+                    <h3>Training &amp; Internships</h3>
+                    <p>Mentor-led, industry-focused programs lasting 4–8 weeks, with hands-on projects and verified certificates.</p>
+                    <ul>
+                      <li><b>Python:</b> Core Python, data structures, OOP, CLI apps, automation, and data analysis.</li>
+                      <li><b>Web Development:</b> HTML, CSS, JavaScript, React, portfolio sites, and e-commerce UIs.</li>
+                      <li><b>AI:</b> ML fundamentals, neural networks, predictive models, chatbots, and image classifiers.</li>
+                      <li><b>Cloud Computing:</b> AWS/GCP basics, serverless functions, hosting, and cloud databases.</li>
+                      <li><b>Cybersecurity:</b> Network security, ethical hacking, vulnerability scanners, and secure auth.</li>
+                    </ul>
+                    <div className="about-jm-course-links">
+                      <a href="https://jmvertextechnologies.com/python-training" target="_blank" rel="noreferrer">Python course</a>
+                      <a href="https://jmvertextechnologies.com/full-stack-training" target="_blank" rel="noreferrer">Web development</a>
+                      <a href="https://jmvertextechnologies.com/ai-training" target="_blank" rel="noreferrer">AI course</a>
+                      <a href="https://jmvertextechnologies.com/cloud-computing-training" target="_blank" rel="noreferrer">Cloud course</a>
+                      <a href="https://jmvertextechnologies.com/cybersecurity-training" target="_blank" rel="noreferrer">Cybersecurity</a>
+                    </div>
+                  </article>
+
+                  <article className="panel about-jm-service-card">
+                    <span className="about-jm-card-icon"><FileText size={19} /></span>
+                    <h3>Website Development</h3>
+                    <p>Fast, modern websites for small businesses, startups, and personal brands—from landing pages to full web applications.</p>
+                    <ol className="about-jm-process">
+                      <li>Consultation &amp; requirements</li><li>UI/UX design &amp; prototyping</li>
+                      <li>Frontend &amp; backend development</li><li>Testing &amp; quality assurance</li><li>Deployment &amp; domain setup</li>
+                    </ol>
+                    <div className="about-jm-featured-project">
+                      <b>Featured project</b>
+                      <p><a href="https://pizzacrave.in/" target="_blank" rel="noreferrer">Pizza Crave <ArrowDownToLine size={12} /></a> — restaurant website with a dynamic video hero carousel, interactive menu, and direct WhatsApp ordering.</p>
+                    </div>
+                  </article>
+
+                  <article className="panel about-jm-service-card">
+                    <span className="about-jm-card-icon"><Languages size={19} /></span>
+                    <h3>Foreign Language Training</h3>
+                    <p>Online and offline classes, flexible timings, beginner-to-advanced learning, and verified certificates.</p>
+                    <div className="about-jm-language-group">
+                      <h4>German</h4>
+                      <ul><li><b>A1 · 8 weeks:</b> Basic vocabulary, simple sentences, and everyday conversations.</li><li><b>A2 · 8 weeks:</b> Complex sentences, past/future tenses, and routine tasks.</li><li><b>B1 · 10 weeks:</b> Independent use, opinions, and preparation for study or work in Germany.</li></ul>
+                    </div>
+                    <div className="about-jm-language-group">
+                      <h4>Japanese</h4>
+                      <ul><li><b>Basic · 6 weeks:</b> Hiragana, Katakana, and basic conversation.</li><li><b>JLPT N5 · 10 weeks:</b> Basic grammar, around 100 Kanji, and daily communication.</li><li><b>JLPT N4 · 12 weeks:</b> Advanced vocabulary, complex grammar, and around 300 Kanji.</li></ul>
+                    </div>
+                  </article>
+
+                  <article className="panel about-jm-service-card">
+                    <span className="about-jm-card-icon"><Settings2 size={19} /></span>
+                    <h3>Custom Project Building</h3>
+                    <p>End-to-end support for first-year mini-projects, final-year capstones, and startup MVPs.</p>
+                    <h4>Project domains</h4>
+                    <ul><li>Full-stack web apps: React, Node.js, Python, and PHP.</li><li>AI/ML: Computer vision and natural language processing.</li><li>Mobile apps: React Native and Flutter.</li><li>Cloud infrastructure: AWS and GCP.</li></ul>
+                    <div className="about-jm-deliverables"><b>Deliverables</b><span>Source code</span><span>Project reports</span><span>Architecture design</span><span>Deployment</span><span>Documentation support</span></div>
+                  </article>
+                </div>
+              </section>
+
+              <section className="about-jm-contact">
+                <div><span className="eyebrow">GET IN TOUCH</span><h2>Contact JM Vertex Technologies</h2><p>Monday–Saturday, 9:00 AM–6:00 PM · Sunday closed</p></div>
+                <div className="about-jm-contact-links">
+                  <a href="mailto:jmvertextechnologies2025@gmail.com"><b>Email</b><span>jmvertextechnologies2025@gmail.com</span></a>
+                  <a href="tel:+919092737477"><b>Phone</b><span>+91 90927 37477</span></a>
+                  <a href="tel:+919345699376"><b>Phone</b><span>+91 93456 99376</span></a>
+                  <a href="https://jmvertextechnologies.com/" target="_blank" rel="noreferrer"><b>Website</b><span>jmvertextechnologies.com</span></a>
+                </div>
               </section>
             </div>
           </>
@@ -3225,20 +5380,32 @@ export default function App() {
     }
   }
 
+  const settingsPages: PageName[] = ['Settings', 'Account / Privacy', 'Companion & Themes', 'About JM Vertex'];
+
+  if (signToken) return <SignaturePage token={signToken} />;
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
   return (
     <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       <header className="topbar">
         <button className="icon-button menu-button" aria-label="Toggle navigation" onClick={() => setSidebarOpen((open) => !open)}><Menu size={19} /></button>
         <button className="brand" onClick={() => setPage('Home / Workspace')}><span className="brand-mark"><img src="/jm-logo.png" alt="JM logo" /></span><span><b>Vertex Docs</b><small>JM Vertex Technologies</small></span></button>
+<<<<<<< HEAD
         <div className="top-search"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') setPage('Convert'); }} placeholder="Search documents, tools or features..." /></div>
         <div className="top-actions">
           <button className="icon-button" aria-label="Appearance settings" onClick={() => setPage('Companion & Themes')}>{themeMode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
           <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setNotice(token ? 'You are all caught up.' : 'Sign in to see account notifications.')}><Bell size={18} /></button>
+=======
+        <div className="top-actions">
+          <button className="icon-button" aria-label="Appearance settings" onClick={() => setPage('Companion & Themes')}><Palette size={18} /></button>
+          <NotificationBell token={token} refreshKey={historyTick} onOpen={openNotification} />
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
           {user ? (
             <button className="profile-button" onClick={() => setPage('Account / Privacy')}><span>{user.name.slice(0, 1).toUpperCase()}</span><b>{user.name}</b><ChevronDown size={15} /></button>
           ) : <button className="profile-button" onClick={() => setPage('Account / Privacy')}><span><UserRound size={15} /></span><b>Sign in</b><ChevronDown size={15} /></button>}
         </div>
       </header>
+<<<<<<< HEAD
       <div className="app-body">
         <aside className="sidebar">
           <span className="sidebar-caption">WORKSPACE</span>
@@ -3252,12 +5419,32 @@ export default function App() {
               <button onClick={() => setChatOpen(true)}>Open assistant</button>
             </section>}
           <nav className="sidebar-bottom">{navItems.slice(7).map(({ name: itemName, label, icon: Icon }) => (
+=======
+      {token && shareTarget && <ShareDialog token={token} documentId={shareTarget.id} documentName={shareTarget.name} onClose={() => setShareTarget(null)} onChanged={() => setHistoryTick((value) => value + 1)} />}
+      {token && previewTarget && <DocumentPreview token={token} documentId={previewTarget.id} name={previewTarget.name} onClose={() => setPreviewTarget(null)} />}
+      {token && annotateTarget && <PdfAnnotator token={token} documentId={annotateTarget.id} name={annotateTarget.name} onClose={() => { setAnnotateTarget(null); setHistoryTick((value) => value + 1); }} />}
+      <div className="app-body">
+        <aside className="sidebar">
+          <span className="sidebar-caption">WORKSPACE</span>
+          <nav>          {navItems.slice(0, 8).map(({ name: itemName, label, icon: Icon }) => (
+            <button className={page === itemName || (itemName === 'Settings' && settingsPages.includes(page)) ? 'active' : ''} key={itemName} onClick={() => { setPage(itemName); if (itemName === 'AI Documents') setChatOpen(false); }}><Icon size={18} /><span>{label}</span></button>
+          ))}</nav>
+          {token && adminAccess === 'allowed' && <nav className="admin-sidebar-nav" aria-label="Administration">
+            <button className={page === 'Admin Dashboard' ? 'active' : ''} onClick={() => setPage('Admin Dashboard')}><ShieldCheck size={18} /><span>Admin Dashboard</span></button>
+          </nav>}
+          <nav className="sidebar-bottom">{navItems.slice(8).map(({ name: itemName, label, icon: Icon }) => (
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
             <button className={page === itemName ? 'active' : ''} key={itemName} onClick={() => setPage(itemName)}><Icon size={18} /><span>{label}</span></button>
           ))}</nav>
         </aside>
         <main className="main-content">
           {renderPage()}
+<<<<<<< HEAD
           {notice && !['Account / Privacy', 'Companion & Themes'].includes(page) && <Notice message={notice} onClose={() => setNotice('')} />}
+=======
+          {backendProblem && <div className="notice backend-problem" role="alert"><span><b>Backend not connected.</b> {backendProblem}</span></div>}
+          {notice && !settingsPages.includes(page) && <Notice message={notice} onClose={() => setNotice('')} />}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         </main>
       </div>
       {page !== 'AI Documents' && assistantToast && (
@@ -3292,11 +5479,19 @@ function TemplateArtwork({ template }: { template: TemplateKind }) {
   return (
     <span className={`template-card-art ${template}`} aria-hidden="true">
       <span className="template-mini-page">
+<<<<<<< HEAD
         {template==='resume'&&<><span className="template-mini-profile"><i/><span><b/><i/></span></span><i className="template-mini-rule"/><b className="template-mini-heading"/><i/><i/><b className="template-mini-heading"/><i/><i/></>}
         {(template==='cover-letter'||template==='business-letter')&&<><b className="template-mini-heading"/><i/><i/><i className="template-mini-space"/><i/><i/><i/><i/></>}
         {template==='meeting-notes'&&<><b className="template-mini-heading"/><i className="template-mini-date"/><b className="template-mini-heading"/><i/><i/><i className="template-mini-check"/><i className="template-mini-check"/></>}
         {template==='project-proposal'&&<><span className="template-mini-banner"/><b className="template-mini-heading"/><i/><i/><b className="template-mini-heading"/><i/><i/></>}
         {template==='invoice'&&<><span className="template-mini-invoice-head"><b/><i/></span><span className="template-mini-invoice-table"><b/><i/><i/><i/><i/><i/></span><i className="template-mini-total"/></>}
+=======
+        {template === 'resume' && <><span className="template-mini-profile"><i /><span><b /><i /></span></span><i className="template-mini-rule" /><b className="template-mini-heading" /><i /><i /><b className="template-mini-heading" /><i /><i /></>}
+        {(template === 'cover-letter' || template === 'business-letter') && <><b className="template-mini-heading" /><i /><i /><i className="template-mini-space" /><i /><i /><i /><i /></>}
+        {template === 'meeting-notes' && <><b className="template-mini-heading" /><i className="template-mini-date" /><b className="template-mini-heading" /><i /><i /><i className="template-mini-check" /><i className="template-mini-check" /></>}
+        {template === 'project-proposal' && <><span className="template-mini-banner" /><b className="template-mini-heading" /><i /><i /><b className="template-mini-heading" /><i /><i /></>}
+        {template === 'invoice' && <><span className="template-mini-invoice-head"><b /><i /></span><span className="template-mini-invoice-table"><b /><i /><i /><i /><i /><i /></span><i className="template-mini-total" /></>}
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
       </span>
     </span>
   );

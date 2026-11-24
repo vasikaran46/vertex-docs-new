@@ -147,6 +147,7 @@
   transition-duration: 0.08s;
 }
 
+<<<<<<< HEAD
 /* =========================================================================
    2. Sidebar "Need a hand?" Launcher Card (.sidebar-assistant)
    ========================================================================= */
@@ -182,6 +183,8 @@
   filter: brightness(1.05);
 }
 
+=======
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 .sidebar-companion-card {
   position: relative;
   overflow: hidden;

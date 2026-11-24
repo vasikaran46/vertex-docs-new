@@ -2,6 +2,11 @@ fastapi==0.115.12
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 sqlalchemy==2.0.39
+<<<<<<< HEAD
+=======
+alembic>=1.13,<2
+psycopg[binary]>=3.2,<4
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-jose[cryptography]==3.4.0
@@ -15,3 +20,8 @@ openpyxl>=3.1,<4
 python-pptx>=1.0,<2
 httpx==0.28.1
 python-dotenv==1.0.1
+<<<<<<< HEAD
+=======
+supabase>=2.0,<3
+pillow>=10
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5

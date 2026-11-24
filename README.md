@@ -38,6 +38,34 @@ Open http://localhost:5173
 Add `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` to `backend/.env`.
 SQLite is used locally. PostgreSQL can be configured through `DATABASE_URL`.
 
+<<<<<<< HEAD
+=======
+## Connect the backend to Supabase Postgres
+
+The backend uses SQLAlchemy, so use Supabase's PostgreSQL connection URI. The `psycopg` driver is included in `backend/requirements.txt`; no Supabase client SDK or Supabase API key is required for this database connection.
+
+1. Create a Supabase project and set or note its **database password**.
+2. In the Supabase Dashboard, open **Connect** and copy the **Session pooler** connection URI. The backend is a long-running FastAPI service, so use the session pooler (or direct connection if your host supports IPv6). The copied URI provides the correct username, host, port, and database name for your project.
+3. Copy `backend/.env.example` to `backend/.env` if you have not already, then replace `DATABASE_URL` with the copied URI. Keep `?sslmode=require` in the connection string. The backend accepts Supabase's `postgresql://` URI format and routes it through psycopg.
+4. From `backend`, install the requirements and start/restart the API:
+
+   ```powershell
+   pip install -r requirements.txt
+   uvicorn app.main:app --reload --reload-dir app --port 8000
+   ```
+
+The API creates missing tables from its SQLAlchemy models when it starts. This does not migrate existing SQLite data into Supabase; export/import that data separately if you need to retain it.
+
+### Supabase values you need
+
+- **Database connection URI** from **Connect → Session pooler**. It includes the database username, pooler host, port, and database name.
+- **Database password** for the Supabase project's Postgres database. This is the value used in the URI in place of `[YOUR-PASSWORD]`; reset it in the Supabase project settings if you do not know it. URL-encode reserved characters in the password before inserting it into the URI.
+
+This app currently uses its own JWT authentication and connects to Postgres from the backend. It does **not** need the Supabase project URL, publishable/anon key, or secret/service-role key. Never put a database password or service-role/secret key in the frontend. The database connection stores document metadata; uploaded document files remain in the backend's local `backend/storage` folder, so a deployed backend also needs persistent file storage or a separate Supabase Storage integration.
+
+See [Supabase's Postgres connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres) for connection modes and connection-string details.
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 ## Tests
 Run the backend API tests with:
 ```powershell

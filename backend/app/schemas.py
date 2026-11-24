@@ -7,6 +7,11 @@ class SignupIn(BaseModel):
 class LoginIn(BaseModel):
     email:EmailStr
     password:str
+<<<<<<< HEAD
+=======
+class SupabaseProfileIn(BaseModel):
+    name:str=Field(min_length=2,max_length=120)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 class UserOut(BaseModel):
     id:int; name:str; email:str; theme:str; language:str; avatar:str
     class Config: from_attributes=True
@@ -15,6 +20,7 @@ class AuthOut(BaseModel):
     token_type:Literal["bearer"]="bearer"
     user:UserOut
 class PreferencesIn(BaseModel):
+<<<<<<< HEAD
     theme:Literal[
         "forest-light","forest-dark","rose-light","rose-dark","graphite-light","graphite-dark",
         "cocoa-light","cocoa-dark","amber-light","amber-dark","ocean-light","ocean-dark",
@@ -24,6 +30,11 @@ class PreferencesIn(BaseModel):
         "deep-teal-light","deep-teal-dark",
         "forest","rose","graphite","cocoa","amber","ocean","porcelain","mint","sand","sage","dark","light",
     ]|None=None
+=======
+    # Theme ids are validated by shape rather than a fixed list so new colour themes can ship
+    # from the frontend without a schema change. Legacy ids ("forest-dark", "dark", ...) are still accepted.
+    theme:str|None=Field(default=None,pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$",min_length=2,max_length=24)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     language:str|None=None
     avatar:Literal["robo","nova","finn","milo","pip","wiz"]|None=None
 class ChatTurn(BaseModel):
@@ -50,6 +61,13 @@ class TranslationIn(BaseModel):
     text:str=Field(min_length=1,max_length=20000)
     source_language:Literal["auto","en","ta","hi","ml","te","kn","ja","de","sa","bn","fr","es","tanglish"]="auto"
     target_language:Literal["en","ta","hi","ml","te","kn","ja","de","sa","bn","fr","es","tanglish"]
+<<<<<<< HEAD
+=======
+class HumanizeIn(BaseModel):
+    text:str=Field(min_length=1,max_length=20000)
+    writing_style:Literal["simple","professional","conversational","academic"]="simple"
+    strength:int=Field(default=3,ge=1,le=5)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 class TemplateRenderIn(BaseModel):
     template:Literal["resume","cover-letter","business-letter","meeting-notes","project-proposal","invoice"]
     layout:Literal["modern","classic","compact"]="modern"

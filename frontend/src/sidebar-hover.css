@@ -40,6 +40,7 @@
 }
 
 /* --------------------------------------------------------------------------
+<<<<<<< HEAD
    2. "Need a hand?" assistant launcher card (.sidebar-assistant)
    Enhances chatbot.css transitions — adds glow ring and button press.
    -------------------------------------------------------------------------- */
@@ -65,13 +66,20 @@
 
 /* --------------------------------------------------------------------------
    3. Sidebar-bottom links (Account / Privacy, Companion & Themes)
+=======
+   2. Sidebar-bottom links (Account / Privacy, Companion & Themes)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
    Re-uses the same nav button selectors; effects inherited from §1 above.
    -------------------------------------------------------------------------- */
 
 /* (Covered by .sidebar nav button rules — no extra CSS needed.) */
 
 /* --------------------------------------------------------------------------
+<<<<<<< HEAD
    4. Brand / logo header block (topbar) — very light hover only
+=======
+   3. Brand / logo header block (topbar) — very light hover only
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
    -------------------------------------------------------------------------- */
 
 .brand {
@@ -93,7 +101,11 @@
 }
 
 /* --------------------------------------------------------------------------
+<<<<<<< HEAD
    5. Responsive: disable transforms on small screens (single-row nav)
+=======
+   4. Responsive: disable transforms on small screens (single-row nav)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
    -------------------------------------------------------------------------- */
 
 @media (max-width: 740px) {

@@ -194,3 +194,26 @@ class ConversionToolsTests(ApiTestCase):
         response = self.convert("sample.exe", b"not a document", "pdf")
         self.assertEqual(response.status_code, 415)
         self.assertIn("not supported", response.json()["detail"])
+<<<<<<< HEAD
+=======
+
+    def test_tamil_and_hindi_text_embed_unicode_fonts_in_pdf(self):
+        cases = [
+            ("tamil.txt", "தமிழ் மொழி சோதனை. இது ஒரு சோதனை ஆவணம்."),
+            ("hindi.txt", "हिन्दी भाषा परीक्षण। यह एक परीक्षण दस्तावेज़ है।"),
+        ]
+        for filename, text in cases:
+            with self.subTest(filename=filename):
+                response = self.convert(filename, text.encode("utf-8"), "pdf")
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.headers["content-type"], "application/pdf")
+                reader = PdfReader(io.BytesIO(response.content))
+                self.assertGreater(len(reader.pages), 0)
+                fonts = reader.pages[0]["/Resources"]["/Font"]
+                embedded = []
+                for font in fonts.values():
+                    descriptor = font.get_object().get("/FontDescriptor")
+                    if descriptor:
+                        embedded.append(bool(descriptor.get_object().get("/FontFile2")))
+                self.assertTrue(any(embedded), "expected an embedded TrueType font in the PDF")
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5

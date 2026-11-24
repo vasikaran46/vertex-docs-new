@@ -1101,7 +1101,11 @@ export function VertexAssistant({
                 </button>
                 {!token && (
                   <small style={{ display: 'block', marginTop: 8 }}>
+<<<<<<< HEAD
                     Sign in to chat. Add an LLM_API_KEY to backend/.env to enable AI replies.
+=======
+                    Sign in to chat and keep your private chat history.
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                   </small>
                 )}
               </div>

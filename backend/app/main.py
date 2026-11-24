@@ -1,19 +1,45 @@
 import os
+<<<<<<< HEAD
 from dotenv import load_dotenv
 
 load_dotenv()
+=======
+from pathlib import Path
+from dotenv import load_dotenv
+
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+if not os.getenv("VERTEX_IGNORE_ENV_FILE"):
+    load_dotenv(dotenv_path=ENV_FILE, override=True)
+
+print("Vertex Docs .env path:", ENV_FILE)
+print("Vertex Docs LLM API key loaded:", bool(os.getenv("LLM_API_KEY", "").strip()))
+print("Vertex Docs LLM model:", os.getenv("LLM_MODEL"))
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
 from . import models
+<<<<<<< HEAD
 from .routers import auth, settings, documents, pdf, ai, templates
 from .chatbot.routes import router as chatbot_router
 
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+=======
+from .routers import auth, settings, documents, pdf, ai, templates, admin, notifications, history, sharing, annotations, signatures, export, translation
+from .chatbot.routes import router as chatbot_router
+
+
+# Create legacy/application tables as before, but let Alembic own the new
+# activity log table so startup cannot silently modify an existing database.
+Base.metadata.create_all(
+    bind=engine,
+    tables=[table for table in Base.metadata.sorted_tables if table.name != "activity_logs"],
+)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
 
 # Initialize FastAPI
@@ -63,6 +89,17 @@ for router in (
     pdf.router,
     ai.router,
     templates.router,
+<<<<<<< HEAD
+=======
+    admin.router,
+    notifications.router,
+    history.router,
+    sharing.router,
+    annotations.router,
+    signatures.router,
+    export.router,
+    translation.router,
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     chatbot_router,
 ):
     app.include_router(router)
@@ -74,4 +111,8 @@ def health():
         "status": "ok",
         "service": "Vertex Docs API"
     }
+<<<<<<< HEAD
     
+=======
+    
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5

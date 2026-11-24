@@ -14,6 +14,11 @@ from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 import pymupdf
 
+<<<<<<< HEAD
+=======
+from ..ocr import image_text_with_ocr, pdf_text_with_ocr
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 logger = logging.getLogger(__name__)
 
 STORAGE_ENV = os.getenv("STORAGE_DIR", "").strip()
@@ -87,12 +92,33 @@ def extract_pdf_text(content: bytes) -> tuple[str, bool]:
         doc.close()
 
     full_text = "\n\n".join(pages_text).strip()
+<<<<<<< HEAD
     if not full_text:
         return (
             "OCR not available: this PDF appears to be a scanned image or contains no selectable text. Please upload a document with readable text or convert it first.",
             True,
         )
     return full_text, False
+=======
+    if full_text:
+        return full_text, False
+
+    # No selectable text: fall back to OCR so scanned PDFs still reach the assistant.
+    try:
+        ocr_text = pdf_text_with_ocr(content).strip()
+    except HTTPException as error:
+        logger.info("OCR not available for scanned PDF: %s", error.detail)
+        ocr_text = ""
+    except Exception as error:
+        logger.warning("OCR failed for scanned PDF: %s", error)
+        ocr_text = ""
+    if ocr_text:
+        return ocr_text, True
+    return (
+        "OCR not available: this PDF appears to be a scanned image or contains no selectable text. Please upload a document with readable text or convert it first.",
+        True,
+    )
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
 
 def extract_plain_text(content: bytes) -> str:
@@ -150,6 +176,16 @@ def ingest_attachment(
             raise HTTPException(413, "Images must be 4 MB or smaller.")
         is_image = True
         image_base64 = extract_image_payload(content, ext)
+<<<<<<< HEAD
+=======
+        # Keep OCR text as well so non-vision models can still read the image.
+        try:
+            extracted_text = image_text_with_ocr(content).strip()
+        except HTTPException as error:
+            logger.info("OCR not available for image attachment: %s", error.detail)
+        except Exception as error:
+            logger.warning("OCR failed for image attachment: %s", error)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
     record = {
         "id": attachment_id,

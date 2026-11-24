@@ -3,6 +3,10 @@ import json
 import logging
 import os
 from datetime import datetime
+<<<<<<< HEAD
+=======
+from pathlib import Path
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 from typing import Any, Literal
 
 import httpx
@@ -14,6 +18,10 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db, SessionLocal
+<<<<<<< HEAD
+=======
+from ..activity import record_activity
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 from ..models import AssistantConversation, AssistantMessage
 from ..security import current_user
 from .attachments import (
@@ -37,6 +45,72 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["Chatbot"])
 
 
+<<<<<<< HEAD
+=======
+async def _empty_lines():
+    return
+    yield  # pragma: no cover
+
+
+async def llm_chat(client: httpx.AsyncClient, base: str, key: str, messages: list[dict[str, Any]], tools: list | None = None) -> tuple[dict[str, Any], str]:
+    """Call the chat model with fallbacks.
+
+    Tries every model from LLM_MODEL (comma separated; free OpenRouter fallbacks are appended when all are ':free').
+    For each model, if the provider rejects the `tools` parameter (many free models do), it retries without tools.
+    Returns (response_json, model_used). Raises 502 with the per-model reasons if everything fails.
+    """
+    from ..routers.ai import llm_models
+
+    problems: list[str] = []
+    for model in llm_models():
+        for use_tools in ([True, False] if tools else [False]):
+            body: dict[str, Any] = {"model": model, "messages": messages}
+            if use_tools:
+                body["tools"] = tools
+                body["tool_choice"] = "auto"
+            try:
+                response = await client.post(base + "/chat/completions", headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json=body)
+            except httpx.RequestError as error:
+                problems.append(f"{model}: could not connect ({error.__class__.__name__})")
+                break
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    data["choices"][0]["message"]
+                    return data, model
+                except (ValueError, KeyError, IndexError, TypeError):
+                    problems.append(f"{model}: unexpected response")
+                    break
+            problems.append(f"{model}: HTTP {response.status_code} {response.text[:120]}")
+            if response.status_code in (401, 403):
+                raise HTTPException(502, "The AI provider rejected LLM_API_KEY. Check the key and LLM_BASE_URL in backend/.env.")
+            if use_tools and response.status_code in (400, 404, 422):
+                continue  # retry the same model without tool calling
+            break
+    raise HTTPException(502, "No configured AI model answered. " + " | ".join(problems[-3:]))
+
+
+def _record_conversion_artifacts(user_id: int, artifacts: list[dict[str, Any]]) -> None:
+    for artifact in artifacts:
+        document_id = artifact.get("document_id")
+        if type(document_id) is not int or document_id <= 0:
+            continue
+        filename = artifact.get("filename")
+        output_format = Path(filename).suffix.lstrip(".") if isinstance(filename, str) else None
+        record_activity(
+            user_id,
+            "assistant.document_conversion",
+            "document",
+            document_id,
+            {
+                "output_format": output_format,
+                "output_size_bytes": artifact.get("size"),
+                "mode": "tool",
+            },
+        )
+
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 class ChatMessageIn(BaseModel):
     text: str = Field(default="", max_length=12000)
     attachment_ids: list[str] = Field(default_factory=list)
@@ -211,6 +285,17 @@ async def convert_attachment_direct(
         conv.updated_at = datetime.utcnow()
         db.commit()
 
+<<<<<<< HEAD
+=======
+    record_activity(
+        u.id,
+        "assistant.document_conversion",
+        "document",
+        artifact.get("document_id") if type(artifact.get("document_id")) is int else None,
+        {"output_format": target_format, "output_size_bytes": artifact.get("size"), "mode": "conversion"},
+    )
+
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
     return {
         "status": "success",
         "file_id": artifact.get("document_id"),
@@ -270,6 +355,16 @@ async def send_chat_message(
             db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=reply_text))
             conv.updated_at = datetime.utcnow()
             db.commit()
+<<<<<<< HEAD
+=======
+            record_activity(
+                u.id,
+                "assistant.conversion",
+                "document",
+                artifact.get("document_id") if type(artifact.get("document_id")) is int else None,
+                {"output_format": tgt_fmt, "output_size_bytes": artifact.get("size"), "mode": "conversion", "attachment_count": 1},
+            )
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
             if payload.stream:
                 async def stream_artifact():
@@ -297,7 +392,11 @@ async def send_chat_message(
     if not key:
         raise HTTPException(503, "Add LLM_API_KEY to backend/.env")
     base = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+<<<<<<< HEAD
     model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+=======
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")  # first choice; llm_chat() applies the full fallback list
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
     system_instruction = build_system_prompt(payload.language)
     msgs: list[dict[str, Any]] = [{"role": "system", "content": system_instruction}]
@@ -326,6 +425,7 @@ async def send_chat_message(
             reply_accumulator = []
             try:
                 async with httpx.AsyncClient(timeout=90) as client:
+<<<<<<< HEAD
                     # 1. Initial request with tools
                     resp = await client.post(
                         base + "/chat/completions",
@@ -343,6 +443,10 @@ async def send_chat_message(
                         return
 
                     resp_data = resp.json()
+=======
+                    # 1. Initial request with tools (falls back across models / without tools)
+                    resp_data, model = await llm_chat(client, base, key, msgs, CHATBOT_TOOL_SCHEMAS)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                     choice = resp_data["choices"][0]
                     message = choice["message"]
 
@@ -376,16 +480,34 @@ async def send_chat_message(
                             })
 
                         # Stream the final answer after tool execution
+<<<<<<< HEAD
+=======
+                        provider_stream_completed = False
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                         async with client.stream(
                             "POST",
                             base + "/chat/completions",
                             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                             json={"model": model, "messages": msgs, "stream": True},
                         ) as follow_up_resp:
+<<<<<<< HEAD
                             async for line in follow_up_resp.aiter_lines():
                                 if line.startswith("data: "):
                                     raw = line[6:].strip()
                                     if raw == "[DONE]":
+=======
+                            if follow_up_resp.status_code != 200:
+                                fallback_data, _ = await llm_chat(client, base, key, msgs)
+                                fallback_text = fallback_data["choices"][0]["message"].get("content") or ""
+                                reply_accumulator.append(fallback_text)
+                                yield f"data: {json.dumps({'token': fallback_text})}\n\n"
+                                provider_stream_completed = True
+                            async for line in (follow_up_resp.aiter_lines() if follow_up_resp.status_code == 200 else _empty_lines()):
+                                if line.startswith("data: "):
+                                    raw = line[6:].strip()
+                                    if raw == "[DONE]":
+                                        provider_stream_completed = True
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                                         break
                                     try:
                                         p = json.loads(raw)
@@ -395,15 +517,28 @@ async def send_chat_message(
                                             yield f"data: {json.dumps({'token': delta})}\n\n"
                                     except Exception:
                                         pass
+<<<<<<< HEAD
                     else:
                         # Direct content without tool call
                         content = message.get("content", "")
+=======
+                        if not provider_stream_completed:
+                            yield f"data: {json.dumps({'error': 'Assistant error: AI provider stream ended before completion.'})}\n\n"
+                            return
+                    else:
+                        # Direct content without tool call
+                        content = message.get("content") or ""
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                         reply_accumulator.append(content)
                         yield f"data: {json.dumps({'token': content})}\n\n"
 
                 final_text = "".join(reply_accumulator)
                 with SessionLocal() as save_db:
                     c = save_db.query(AssistantConversation).filter_by(id=conv_id).first()
+<<<<<<< HEAD
+=======
+                    persisted = False
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                     if c:
                         if c.title == "New chat":
                             clean_t = user_text.strip().split("\n")[0][:45]
@@ -413,11 +548,29 @@ async def send_chat_message(
                         save_db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=final_text))
                         save_db.commit()
                         title_res = c.title
+<<<<<<< HEAD
                     else:
                         title_res = "Chat"
 
                 yield f"data: {json.dumps({'done': True, 'reply': final_text, 'artifacts': artifacts_collected, 'conversation_id': conv_id, 'title': title_res})}\n\n"
 
+=======
+                        persisted = True
+                    else:
+                        title_res = "Chat"
+
+                if persisted:
+                    _record_conversion_artifacts(u.id, artifacts_collected)
+                    record_activity(u.id, "assistant.message", "assistant_conversation", conv_id, {
+                        "mode": "stream", "language": payload.language,
+                        "streamed": True, "attachment_count": len(attachments),
+                        "tool_count": len(artifacts_collected),
+                    })
+                yield f"data: {json.dumps({'done': True, 'reply': final_text, 'artifacts': artifacts_collected, 'conversation_id': conv_id, 'title': title_res})}\n\n"
+
+            except HTTPException as e:
+                yield f"data: {json.dumps({'error': e.detail})}\n\n"
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
             except Exception as e:
                 logger.exception("Error in send_chat_message stream")
                 yield f"data: {json.dumps({'error': f'Assistant error: {str(e)}'})}\n\n"
@@ -426,6 +579,7 @@ async def send_chat_message(
 
     # Non-streaming fallback
     async with httpx.AsyncClient(timeout=90) as client:
+<<<<<<< HEAD
         resp = await client.post(
             base + "/chat/completions",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -440,6 +594,9 @@ async def send_chat_message(
             raise HTTPException(502, f"AI Provider returned {resp.status_code}: {resp.text[:200]}")
 
         resp_data = resp.json()
+=======
+        resp_data, model = await llm_chat(client, base, key, msgs, CHATBOT_TOOL_SCHEMAS)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
         message = resp_data["choices"][0]["message"]
         artifacts = []
 
@@ -447,14 +604,28 @@ async def send_chat_message(
             msgs.append(message)
             for tool_call in message["tool_calls"]:
                 fn = tool_call["function"]
+<<<<<<< HEAD
                 t_args = json.loads(fn.get("arguments", "{}"))
                 if "attachment_id" not in t_args and attachments:
                     t_args["attachment_id"] = attachments[0]["id"]
                 t_res, t_art = execute_tool_call(fn["name"], t_args, u.id, db)
+=======
+                try:
+                    t_args = json.loads(fn.get("arguments", "{}"))
+                except Exception:
+                    t_args = {}
+                if "attachment_id" not in t_args and attachments:
+                    t_args["attachment_id"] = attachments[0]["id"]
+                try:
+                    t_res, t_art = execute_tool_call(fn["name"], t_args, u.id, db)
+                except HTTPException as tool_error:
+                    t_res, t_art = {"error": tool_error.detail}, None
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
                 if t_art:
                     artifacts.append(t_art)
                 msgs.append({"role": "tool", "tool_call_id": tool_call["id"], "content": json.dumps(t_res)})
 
+<<<<<<< HEAD
             follow_up = await client.post(
                 base + "/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -463,10 +634,24 @@ async def send_chat_message(
             final_text = follow_up.json()["choices"][0]["message"]["content"]
         else:
             final_text = message.get("content", "")
+=======
+            follow_up, _ = await llm_chat(client, base, key, msgs)
+            final_text = follow_up["choices"][0]["message"].get("content") or ""
+        else:
+            final_text = message.get("content") or ""
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
         db.add(AssistantMessage(conversation_id=conv_id, role="user", content=user_text))
         db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=final_text))
         db.commit()
+<<<<<<< HEAD
+=======
+        _record_conversion_artifacts(u.id, artifacts)
+        record_activity(u.id, "assistant.message", "assistant_conversation", conv_id, {
+            "mode": "chat", "language": payload.language,
+            "attachment_count": len(attachments), "tool_count": len(artifacts),
+        })
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
         return {
             "text": final_text,

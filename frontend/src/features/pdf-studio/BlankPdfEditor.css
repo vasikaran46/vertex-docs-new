@@ -1,0 +1,238 @@
+/* ============================================================
+   BlankPdfEditor – styles
+   ============================================================ */
+
+.blank-editor-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #f0f1f3;
+}
+
+/* ---- Toolbar ---- */
+.blank-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #fff;
+  border-bottom: 1px solid #d0d5dd;
+  padding: 6px 10px 4px;
+  user-select: none;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+
+.blank-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.blank-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #333;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.blank-toolbar button:hover {
+  background: #e8edf5;
+  border-color: #c5cdd8;
+}
+.blank-toolbar button:active {
+  background: #d2daea;
+}
+
+.blank-select {
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  padding: 3px 5px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+  color: #333;
+  outline: none;
+}
+.blank-font-family { min-width: 130px; }
+.blank-font-size   { width: 65px; }
+
+.blank-divider {
+  width: 1px;
+  height: 22px;
+  background: #d0d5dd;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.blank-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #333;
+}
+
+.blank-btn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #333;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.blank-btn-label:hover {
+  background: #e8edf5;
+  border-color: #c5cdd8;
+}
+
+/* ---- Color swatch ---- */
+.blank-color-wrap {
+  position: relative;
+}
+.blank-color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 5px;
+  border: 1px solid #aaa;
+  border-radius: 2px;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+.blank-color-popup {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  z-index: 999;
+  background: #fff;
+  border: 1px solid #c5cdd8;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  padding: 10px;
+  min-width: 200px;
+}
+.blank-color-label {
+  font-size: 11px;
+  color: #888;
+  margin: 6px 0 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.blank-color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 20px);
+  gap: 3px;
+}
+.blank-swatch-btn {
+  width: 20px !important;
+  height: 20px !important;
+  border: 1px solid rgba(0,0,0,.2) !important;
+  border-radius: 3px !important;
+  padding: 0 !important;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.blank-swatch-btn:hover {
+  transform: scale(1.2);
+  border-color: #333 !important;
+}
+.blank-custom-color {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #555;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+/* ---- Case menu ---- */
+.blank-case-menu {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  z-index: 999;
+  background: #fff;
+  border: 1px solid #c5cdd8;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  padding: 4px;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+}
+.blank-case-menu button {
+  text-align: left;
+  padding: 7px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* ---- Close button ---- */
+.blank-close-btn {
+  margin-left: auto;
+  color: #d33 !important;
+}
+
+/* ---- Page wrap ---- */
+.blank-page-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 24px;
+  display: flex;
+  justify-content: center;
+  background: #e8eaed;
+}
+
+.blank-paper {
+  width: 794px;      /* A4 width at 96dpi */
+  min-height: 1123px; /* A4 height at 96dpi */
+  background: #fff;
+  box-shadow: 0 2px 16px rgba(0,0,0,.18);
+  border-radius: 2px;
+  padding: 72px 80px;
+  box-sizing: border-box;
+}
+
+/* ---- Editable area ---- */
+.blank-editable {
+  min-height: 100%;
+  outline: none;
+  word-break: break-word;
+  color: #111;
+  caret-color: #2563eb;
+}
+.blank-editable:empty::before {
+  content: 'Start typing here…';
+  color: #aab;
+  pointer-events: none;
+}
+.blank-editable img {
+  max-width: 100%;
+  cursor: pointer;
+  display: block;
+  margin: 6px 0;
+}
+.blank-editable ul {
+  list-style: disc;
+  padding-left: 2em;
+}
+.blank-editable ol {
+  list-style: decimal;
+  padding-left: 2em;
+}

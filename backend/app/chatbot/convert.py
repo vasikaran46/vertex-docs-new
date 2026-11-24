@@ -17,6 +17,10 @@ from sqlalchemy.orm import Session
 
 from ..conversion_service import convert_document
 from ..models import Document
+<<<<<<< HEAD
+=======
+from ..storage_service import upload_document
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +184,12 @@ def save_converted_document_for_user(
     db: Session,
 ) -> Document:
     stored = uuid.uuid4().hex + Path(out_filename).suffix.lower()
+<<<<<<< HEAD
     dest = DOCUMENTS_STORE / stored
     dest.write_bytes(out_bytes)
+=======
+    upload_document(stored, out_bytes, media_type)
+>>>>>>> b7386e9dd9cf8207da18e0834c953df908a095c5
 
     doc = Document(
         owner_id=owner_id,

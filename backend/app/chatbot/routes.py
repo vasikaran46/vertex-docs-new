@@ -27,6 +27,7 @@ from .attachments import (
     build_system_prompt,
     format_chat_prompt,
 )
+from .convert import get_conversion_options
 from .tools import (
     CHATBOT_TOOL_SCHEMAS,
     execute_tool_call,
@@ -254,6 +255,24 @@ def get_attachment_info(attachment_id: str, u = Depends(current_user)):
     }
 
 
+@router.get("/convert/options")
+def get_conversion_options_endpoint(
+    attachment_id: str,
+    u = Depends(current_user),
+):
+    """
+    Returns valid conversion target options for the specified attachment.
+    """
+    record = get_attachment(attachment_id, u.id)
+    ext = record.get("extension", "")
+    options = get_conversion_options(ext)
+    return {
+        "attachment_id": attachment_id,
+        "extension": ext,
+        "options": options,
+    }
+
+
 @router.post("/convert")
 async def convert_attachment_direct(
     attachment_id: str = Form(...),
@@ -268,10 +287,12 @@ async def convert_attachment_direct(
     """
     res = await run_in_threadpool(tool_convert_document, attachment_id, target_format, u.id, db)
     artifact = res["artifact"]
+    approximate = res.get("approximate", False)
 
     if conversation_id:
         conv = _get_owned_conversation(conversation_id, db, u.id)
-        reply_text = f"Your {target_format.upper()} conversion of **{artifact['filename']}** is ready!\n\n[DOWNLOAD_CARD:{json.dumps(artifact)}]"
+        note_text = "\n*Note: Layout is approximate - review the result.*" if approximate else ""
+        reply_text = f"Your {target_format.upper()} conversion of **{artifact['filename']}** is ready!{note_text}\n\n[DOWNLOAD_CARD:{json.dumps(artifact)}]"
         db.add(AssistantMessage(conversation_id=conv.id, role="assistant", content=reply_text))
         conv.updated_at = datetime.utcnow()
         db.commit()
@@ -281,7 +302,12 @@ async def convert_attachment_direct(
         "assistant.document_conversion",
         "document",
         artifact.get("document_id") if type(artifact.get("document_id")) is int else None,
-        {"output_format": target_format, "output_size_bytes": artifact.get("size"), "mode": "conversion"},
+        {
+            "output_format": target_format,
+            "output_size_bytes": artifact.get("size"),
+            "mode": "conversion",
+            "approximate": approximate,
+        },
     )
 
     return {
@@ -290,6 +316,7 @@ async def convert_attachment_direct(
         "filename": artifact.get("filename"),
         "size": artifact.get("size"),
         "download_url": artifact.get("url"),
+        "approximate": approximate,
         "artifact": artifact,
         "message": res["message"],
     }
@@ -337,7 +364,9 @@ async def send_chat_message(
         try:
             res = await run_in_threadpool(tool_convert_document, target_att["id"], tgt_fmt, u.id, db)
             artifact = res["artifact"]
-            reply_text = f"I've converted **{target_att['filename']}** to **{tgt_fmt.upper()}** for you!\n\n[DOWNLOAD_CARD:{json.dumps(artifact)}]"
+            approximate = res.get("approximate", False)
+            note_text = "\n*Note: Layout is approximate - review the result.*" if approximate else ""
+            reply_text = f"I've converted **{target_att['filename']}** to **{tgt_fmt.upper()}** for you!{note_text}\n\n[DOWNLOAD_CARD:{json.dumps(artifact)}]"
 
             db.add(AssistantMessage(conversation_id=conv_id, role="user", content=payload.text or f"Convert to {tgt_fmt.upper()}"))
             db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=reply_text))
@@ -348,7 +377,7 @@ async def send_chat_message(
                 "assistant.conversion",
                 "document",
                 artifact.get("document_id") if type(artifact.get("document_id")) is int else None,
-                {"output_format": tgt_fmt, "output_size_bytes": artifact.get("size"), "mode": "conversion", "attachment_count": 1},
+                {"output_format": tgt_fmt, "output_size_bytes": artifact.get("size"), "mode": "conversion", "attachment_count": 1, "approximate": approximate},
             )
 
             if payload.stream:

@@ -9,6 +9,8 @@ export interface DownloadCardProps {
   url?: string;
   download_url?: string;
   content_type?: string;
+  approximate?: boolean;
+  note?: string;
 }
 
 export function DownloadCard({
@@ -34,6 +36,11 @@ export function DownloadCard({
         <div>
           <b>{card.filename}</b>
           <small>{formatSize(card.size)} · Ready to download</small>
+          {card.approximate && (
+            <div style={{ fontSize: '0.72rem', color: '#d97706', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, fontWeight: 500 }}>
+              ⚠️ Layout is approximate - review result
+            </div>
+          )}
         </div>
       </div>
       <div className="chat-download-card-actions">

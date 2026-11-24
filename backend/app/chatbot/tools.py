@@ -20,6 +20,7 @@ from .convert import (
     run_chatbot_conversion,
     save_converted_document_for_user,
     SUPPORTED_CONVERSIONS,
+    get_conversion_options,
 )
 
 logger = logging.getLogger(__name__)
@@ -341,25 +342,21 @@ def tool_convert_document(
     )
 
     tgt = target_format.lower().strip()
-
     if tgt == "text":
         tgt = "txt"
-
-    pair = (src_ext, tgt)
-
-    if pair not in SUPPORTED_CONVERSIONS and not (
-        src_ext in {"jpg", "jpeg", "png", "webp"} and tgt == "pdf"
-    ):
-        raise HTTPException(
-            415,
-            f"Converting from .{src_ext} to {tgt.upper()} "
-            "is not currently supported (Coming soon).",
-        )
+    elif tgt in {"word", "doc"}:
+        tgt = "docx"
+    elif tgt in {"excel", "sheets", "spreadsheet"}:
+        tgt = "xlsx"
+    elif tgt in {"powerpoint", "ppt", "slides"}:
+        tgt = "pptx"
 
     try:
-        out_bytes, media_type, out_filename = run_chatbot_conversion(
+        res = run_chatbot_conversion(
             content, src_filename, tgt
         )
+        out_bytes, media_type, out_filename = res
+        approximate = getattr(res, "approximate", False)
 
         saved_doc = save_converted_document_for_user(
             out_bytes, out_filename, media_type, owner_id, db
@@ -374,8 +371,18 @@ def tool_convert_document(
             500, f"Conversion engine failed: {str(e)}"
         ) from e
 
+    note = "Layout is approximate - review the result." if approximate else None
+    msg = f"Successfully converted {src_filename} to {tgt.upper()}."
+    if approximate:
+        msg += " Layout is approximate - review the result."
+
     return {
         "status": "success",
+        "file_id": saved_doc.id,
+        "filename": saved_doc.original_name,
+        "size": saved_doc.size,
+        "download_url": f"/api/documents/{saved_doc.id}/download",
+        "approximate": approximate,
         "artifact": {
             "type": "download",
             "document_id": saved_doc.id,
@@ -383,10 +390,10 @@ def tool_convert_document(
             "size": saved_doc.size,
             "content_type": saved_doc.content_type,
             "url": f"/api/documents/{saved_doc.id}/download",
+            "approximate": approximate,
+            "note": note,
         },
-        "message": (
-            f"Successfully converted {src_filename} to {tgt.upper()}."
-        ),
+        "message": msg,
     }
 
 
@@ -559,36 +566,41 @@ def detect_fastpath_intent(
     conv_match = re.search(
         r"(?:convert|change|transform|export|save)"
         r"(?:\s+this)?(?:\s+document|\s+file|\s+it)?"
-        r"\s+(?:in)?to\s+(pdf|docx|txt|text|doc)",
+        r"\s+(?:in\s+to|into|to|as)\s+(pdf|docx|txt|text|doc|pptx|ppt|xlsx|excel|sheets|spreadsheet|powerpoint|slides)",
         msg,
     )
 
-    if conv_match:
-        tgt = conv_match.group(1).lower()
+    def _normalize_format(fmt: str) -> str:
+        f = fmt.lower()
+        if f in {"text", "plain"}:
+            return "txt"
+        if f in {"doc", "word"}:
+            return "docx"
+        if f in {"excel", "sheets", "spreadsheet"}:
+            return "xlsx"
+        if f in {"powerpoint", "ppt", "slides"}:
+            return "pptx"
+        return f
 
-        return (
-            "convert",
-            "txt" if tgt == "text" else (
-                "docx" if tgt == "doc" else tgt
-            ),
-        )
+    if conv_match:
+        return ("convert", _normalize_format(conv_match.group(1)))
 
     match = re.search(
-        r"\bconvert\s+(?:to\s+)?(pdf|docx|txt)\b",
+        r"\bconvert\s+(?:to\s+)?(pdf|docx|txt|pptx|xlsx|excel|word|powerpoint|ppt|sheets|slides)\b",
         msg,
     )
 
     if match:
-        return ("convert", match.group(1))
+        return ("convert", _normalize_format(match.group(1)))
 
     match = re.search(
         r"\b(?:make|give)(?:\s+me)?\s+(?:this\s+)?"
-        r"(?:a\s+)?(pdf|docx|txt)\b",
+        r"(?:a\s+)?(pdf|docx|txt|pptx|xlsx|excel|word|powerpoint|ppt|sheets|slides)\b",
         msg,
     )
 
     if match:
-        return ("convert", match.group(1))
+        return ("convert", _normalize_format(match.group(1)))
 
     # 2. Summarize intents
     if re.search(

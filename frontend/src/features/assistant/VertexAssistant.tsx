@@ -167,7 +167,14 @@ export function VertexAssistant({
   // Attachments
   const [activeAttachment, setActiveAttachment] = useState<AttachmentInfo | null>(null);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
-  const [conversionFormat, setConversionFormat] = useState<'pdf' | 'docx' | 'txt'>('pdf');
+  const [conversionFormat, setConversionFormat] = useState<string>('pdf');
+  const [conversionOptions, setConversionOptions] = useState<Array<{
+    format: string;
+    label: string;
+    available: boolean;
+    approximate?: boolean;
+    note?: string;
+  }>>([]);
   const [conversionBusy, setConversionBusy] = useState(false);
 
   // Rename conversation state
@@ -216,6 +223,38 @@ export function VertexAssistant({
       textareaRef.current.style.height = `${Math.min(Math.max(scrollH, 38), 140)}px`;
     }
   }, [input]);
+
+  // Fetch dynamic conversion options when active attachment changes
+  useEffect(() => {
+    if (!activeAttachment || !token) {
+      setConversionOptions([]);
+      return;
+    }
+    let isCurrent = true;
+    fetch(`${api}/api/chat/convert/options?attachment_id=${activeAttachment.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isCurrent && Array.isArray(data.options)) {
+          setConversionOptions(data.options);
+          const available = data.options.filter((o: any) => o.available);
+          if (available.length > 0) {
+            const hasFormat = available.some((o: any) => o.format === conversionFormat);
+            if (!hasFormat) {
+              setConversionFormat(available[0].format);
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load conversion options:', err);
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeAttachment?.id, token]);
 
   // Re-clamp position and size on window resize
   useEffect(() => {
@@ -659,16 +698,30 @@ export function VertexAssistant({
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.detail || `Conversion failed (${res.status})`);
+        const detail = errJson.detail;
+        let msg = `Conversion failed (${res.status})`;
+        if (typeof detail === 'string') {
+          msg = detail;
+        } else if (detail && typeof detail === 'object') {
+          msg = detail.message || detail.error_code || JSON.stringify(detail);
+        }
+        throw new Error(msg);
       }
 
-      const data = (await res.json()) as { artifact: DownloadCardProps; message?: string };
+      const data = (await res.json()) as {
+        status?: string;
+        artifact: DownloadCardProps;
+        approximate?: boolean;
+        message?: string;
+      };
+      const isApprox = data.approximate || data.artifact?.approximate;
+      const noteSuffix = isApprox ? '\n*Note: Layout is approximate - review the result.*' : '';
 
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          text: `Your ${targetFormat.toUpperCase()} conversion of **${sourceFilename}** is ready!`,
+          text: `Your ${targetFormat.toUpperCase()} conversion of **${sourceFilename}** is ready!${noteSuffix}`,
           artifacts: [data.artifact],
           downloadCard: data.artifact,
         },
@@ -1248,7 +1301,7 @@ export function VertexAssistant({
               </button>
               <button
                 className="assistant-chip-btn"
-                disabled={conversionBusy}
+                disabled={conversionBusy || (conversionOptions.length > 0 && conversionOptions.find((o) => o.format === conversionFormat)?.available === false)}
                 onClick={() => void handleConvertAttachment()}
               >
                 <ArrowRightLeft size={13} /> Convert ({conversionFormat.toUpperCase()})
@@ -1298,17 +1351,24 @@ export function VertexAssistant({
           ref={convertSelectRef}
           aria-label="Convert attached file to"
           value={conversionFormat}
-          onChange={(e) => setConversionFormat(e.target.value as any)}
+          onChange={(e) => setConversionFormat(e.target.value)}
+          disabled={!activeAttachment || conversionBusy}
         >
-          <option value="pdf">Convert to PDF</option>
-          <option value="docx">Convert to DOCX</option>
-          <option value="txt">Convert to TXT</option>
-          <option value="pptx" disabled>
-            Convert to PPTX (Coming soon)
-          </option>
-          <option value="xlsx" disabled>
-            Convert to XLSX (Coming soon)
-          </option>
+          {conversionOptions.length > 0 ? (
+            conversionOptions.map((opt) => (
+              <option key={opt.format} value={opt.format} disabled={!opt.available}>
+                {opt.available ? opt.label : `${opt.label} (${opt.note || 'Unavailable'})`}
+              </option>
+            ))
+          ) : (
+            <>
+              <option value="pdf">Convert to PDF</option>
+              <option value="docx">Convert to DOCX</option>
+              <option value="txt">Convert to TXT</option>
+              <option value="pptx">Convert to PPTX</option>
+              <option value="xlsx">Convert to XLSX</option>
+            </>
+          )}
         </select>
 
         <button

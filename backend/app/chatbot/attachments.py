@@ -11,7 +11,9 @@ from typing import Any
 
 from docx import Document as WordDocument
 from fastapi import HTTPException
+from openpyxl import load_workbook
 from PIL import Image, UnidentifiedImageError
+from pptx import Presentation as PowerPointPresentation
 import pymupdf
 
 from ..ocr import image_text_with_ocr, pdf_text_with_ocr
@@ -28,7 +30,7 @@ MAX_FILE_BYTES = 50 * 1024 * 1024
 CONTEXT_BUDGET_CHARS = 18000
 CHUNK_SIZE = 2500
 
-SUPPORTED_DOC_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+SUPPORTED_DOC_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".pptx", ".ppt", ".xlsx", ".xls"}
 SUPPORTED_IMG_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 ALLOWED_EXTENSIONS = SUPPORTED_DOC_EXTENSIONS | SUPPORTED_IMG_EXTENSIONS
 
@@ -79,6 +81,10 @@ def extract_pdf_text(content: bytes) -> tuple[str, bool]:
     except Exception as e:
         raise HTTPException(400, f"Could not read PDF file: {e}") from e
 
+    if doc.is_encrypted or doc.needs_pass:
+        doc.close()
+        raise HTTPException(400, "Password-protected PDFs cannot be read. Please unlock the file or remove the password before attaching.")
+
     pages_text: list[str] = []
     try:
         for page_idx, page in enumerate(doc, start=1):
@@ -109,6 +115,43 @@ def extract_pdf_text(content: bytes) -> tuple[str, bool]:
     )
 
 
+def extract_pptx_text(content: bytes) -> str:
+    try:
+        prs = PowerPointPresentation(io.BytesIO(content))
+        lines: list[str] = []
+        for index, slide in enumerate(prs.slides, start=1):
+            lines.append(f"--- Slide {index} ---")
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for p in shape.text_frame.paragraphs:
+                        if p.text.strip():
+                            lines.append(p.text.strip())
+            if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+                notes = slide.notes_slide.notes_text_frame.text.strip()
+                if notes:
+                    lines.append(f"[Notes: {notes}]")
+            lines.append("")
+        return "\n".join(lines).strip()
+    except Exception as e:
+        raise HTTPException(400, f"Could not read PowerPoint presentation: {e}") from e
+
+
+def extract_xlsx_text(content: bytes) -> str:
+    try:
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+        lines: list[str] = []
+        for sheet in wb.worksheets:
+            lines.append(f"--- Sheet: {sheet.title} ---")
+            for row in sheet.iter_rows(values_only=True):
+                row_vals = [str(cell) if cell is not None else "" for cell in row]
+                if any(row_vals):
+                    lines.append("\t".join(row_vals))
+            lines.append("")
+        return "\n".join(lines).strip()
+    except Exception as e:
+        raise HTTPException(400, f"Could not read Excel spreadsheet: {e}") from e
+
+
 def extract_plain_text(content: bytes) -> str:
     for encoding in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
         try:
@@ -134,6 +177,9 @@ def ingest_attachment(
     owner_id: int,
     conversation_id: int | None = None,
 ) -> dict[str, Any]:
+    if len(content) == 0:
+        raise HTTPException(400, "The attached file is empty (0 bytes). Please upload a valid document.")
+
     if len(content) > MAX_FILE_BYTES:
         raise HTTPException(413, "Files must be 50 MB or smaller.")
 
@@ -159,6 +205,10 @@ def ingest_attachment(
             extracted_text, is_scanned = extract_pdf_text(content)
         elif ext in {".txt", ".md"}:
             extracted_text = extract_plain_text(content)
+        elif ext in {".pptx", ".ppt"}:
+            extracted_text = extract_pptx_text(content)
+        elif ext in {".xlsx", ".xls"}:
+            extracted_text = extract_xlsx_text(content)
     elif ext in SUPPORTED_IMG_EXTENSIONS:
         if len(content) > 4 * 1024 * 1024:
             raise HTTPException(413, "Images must be 4 MB or smaller.")
@@ -284,8 +334,9 @@ def build_system_prompt(reply_language: str = "en") -> str:
         else reply_language
     )
     return (
-        "You are Vertex Assistant. When document content is provided, answer from it only "
-        "and never say you cannot read files. If no document is attached and the user refers to one, "
+        "You are Vertex Assistant. When document content is provided, answer directly from it "
+        "and reference the source file name in your answer (e.g. 'Based on <filename>:' or 'According to <filename>:') so the user knows what was used. "
+        "Never say you cannot read files. If no document is attached and the user refers to one, "
         f"ask them to attach it. Reply in {lang_desc} where possible. "
         "Format your responses cleanly with Markdown (headings, bullet points, bold key terms) "
         "and never claim an operation succeeded unless confirmed."

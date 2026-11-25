@@ -24,6 +24,8 @@ from app.chatbot.tools import (
     detect_fastpath_intent,
 )
 from app.chatbot.attachments import ingest_attachment
+from app.chatbot.routes import attach_from_workspace_document, AttachFromDocumentIn
+from app.storage_service import upload_document
 from app.database import SessionLocal
 from app.models import Document, User
 from tests.support import ApiTestCase
@@ -358,6 +360,86 @@ class ChatbotConversionMatrixTests(ApiTestCase):
 
         pptx_out, _, _ = run_chatbot_conversion(unicode_text, "multi_lang.txt", "pptx")
         self.assertGreater(len(pptx_out), 0)
+
+    # 12. PDF to Images (PNG ZIP)
+    def test_pdf_to_images_conversion(self):
+        pdf_data = _make_pdf("Page 1 Images Test")
+        res = run_chatbot_conversion(pdf_data, "sample.pdf", "png")
+        zip_bytes, media, filename = res
+        self.assertEqual(media, "application/zip")
+        self.assertTrue(filename.endswith(".zip"))
+
+        import zipfile
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        names = zf.namelist()
+        self.assertTrue(len(names) > 0)
+        self.assertTrue(names[0].endswith(".png"))
+
+    # 13. File validation: zero-bytes rejected
+    def test_attachment_zero_bytes_rejected(self):
+        with self.assertRaises(HTTPException) as cm:
+            ingest_attachment("empty.txt", b"", "text/plain", self.user_id)
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertIn("0 bytes", cm.exception.detail)
+
+    # 14. File validation: encrypted PDF rejected
+    def test_attachment_encrypted_pdf_rejected(self):
+        doc = pymupdf.open()
+        p = doc.new_page()
+        p.insert_text((50, 50), "Secret")
+        enc_bytes = doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="1234", owner_pw="admin")
+
+        with self.assertRaises(HTTPException) as cm:
+            ingest_attachment("encrypted.pdf", enc_bytes, "application/pdf", self.user_id)
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertIn("password", cm.exception.detail.lower())
+
+    # 15. Workspace document attachment
+    def test_attach_from_workspace_document(self):
+        import uuid
+        stored_name = f"{uuid.uuid4().hex}.txt"
+        upload_document(stored_name, b"Workspace doc content", "text/plain")
+
+        with SessionLocal() as db:
+            doc = Document(
+                owner_id=self.user_id,
+                original_name="workspace_notes.txt",
+                stored_name=stored_name,
+                content_type="text/plain",
+                size=21,
+            )
+            db.add(doc)
+            db.commit()
+            db.refresh(doc)
+            doc_id = doc.id
+
+            user = db.query(User).filter_by(id=self.user_id).first()
+
+            # Attach existing doc
+            payload = AttachFromDocumentIn(document_id=doc_id)
+            record = attach_from_workspace_document(payload, db=db, u=user)
+            self.assertEqual(record["filename"], "workspace_notes.txt")
+            self.assertEqual(record["extension"], ".txt")
+
+            # Try to attach nonexistent document -> 404
+            bad_payload = AttachFromDocumentIn(document_id=999999)
+            with self.assertRaises(HTTPException) as cm:
+                attach_from_workspace_document(bad_payload, db=db, u=user)
+            self.assertEqual(cm.exception.status_code, 404)
+
+            # Try to attach document belonging to another user -> 404
+            other_user = User(
+                email=f"other_{uuid.uuid4().hex[:6]}@example.com",
+                password_hash="hash",
+                name="Other User",
+            )
+            db.add(other_user)
+            db.commit()
+            db.refresh(other_user)
+
+            with self.assertRaises(HTTPException) as cm:
+                attach_from_workspace_document(payload, db=db, u=other_user)
+            self.assertEqual(cm.exception.status_code, 404)
 
 
 if __name__ == "__main__":

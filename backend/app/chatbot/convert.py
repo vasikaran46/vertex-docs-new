@@ -32,6 +32,7 @@ from ..conversion_service import (
     _libreoffice_convert,
     _open_pdf,
     _pdf_to_docx as cs_pdf_to_docx,
+    _pdf_to_images,
     _reportlab_font,
 )
 from ..models import Document
@@ -74,6 +75,8 @@ MEDIA_TYPES = {
     "txt": "text/plain; charset=utf-8",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "png": "application/zip",
+    "zip": "application/zip",
 }
 
 FORMAT_LABELS = {
@@ -82,6 +85,7 @@ FORMAT_LABELS = {
     "txt": "Plain Text (TXT)",
     "pptx": "PowerPoint Presentation (PPTX)",
     "xlsx": "Excel Spreadsheet (XLSX)",
+    "png": "Images (PNG ZIP)",
 }
 
 APPROXIMATE_FORMATS = {"pptx", "xlsx"}
@@ -273,6 +277,11 @@ def docx_to_xlsx(data: bytes, filename: str) -> tuple[bytes, str, bool]:
     return out.getvalue(), MEDIA_TYPES["xlsx"], True
 
 
+def pdf_to_images(data: bytes, filename: str) -> tuple[bytes, str, bool]:
+    out_bytes = _pdf_to_images(data, "png")
+    return out_bytes, MEDIA_TYPES["png"], False
+
+
 def pdf_to_docx(data: bytes, filename: str) -> tuple[bytes, str, bool]:
     doc = _open_pdf(data)
     word = WordDocument()
@@ -377,6 +386,11 @@ def pdf_to_xlsx(data: bytes, filename: str) -> tuple[bytes, str, bool]:
     return out.getvalue(), MEDIA_TYPES["xlsx"], True
 
 
+def pdf_to_images(data: bytes, filename: str) -> tuple[bytes, str, bool]:
+    out_bytes = _pdf_to_images(data, "png")
+    return out_bytes, MEDIA_TYPES["png"], False
+
+
 def txt_to_pdf(data: bytes, filename: str) -> tuple[bytes, str, bool]:
     text = data.decode("utf-8", errors="replace")
     if not text.strip():
@@ -458,6 +472,11 @@ def txt_to_xlsx(data: bytes, filename: str) -> tuple[bytes, str, bool]:
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue(), MEDIA_TYPES["xlsx"], True
+
+
+def pdf_to_images(data: bytes, filename: str) -> tuple[bytes, str, bool]:
+    out_bytes = _pdf_to_images(data, "png")
+    return out_bytes, MEDIA_TYPES["png"], False
 
 
 def pptx_to_pdf(data: bytes, filename: str) -> tuple[bytes, str, bool]:
@@ -633,6 +652,8 @@ CONVERTERS: dict[tuple[str, str], Any] = {
     ("pdf", "txt"): pdf_to_txt,
     ("pdf", "pptx"): pdf_to_pptx,
     ("pdf", "xlsx"): pdf_to_xlsx,
+    ("pdf", "png"): pdf_to_images,
+    ("pdf", "zip"): pdf_to_images,
 
     ("txt", "pdf"): txt_to_pdf,
     ("md", "pdf"): txt_to_pdf,
@@ -678,18 +699,21 @@ def get_conversion_options(source_extension: str) -> list[dict[str, Any]]:
 
     options = []
     # Candidate target formats in logical display order
-    order = ["pdf", "docx", "txt", "pptx", "xlsx"]
+    order = ["pdf", "docx", "txt", "pptx", "xlsx", "png"]
 
     for tgt in order:
         if tgt == src:
             continue
         pair = (src, tgt)
         if pair in CONVERTERS:
+            label = f"Convert to {tgt.upper()}"
+            if tgt == "png":
+                label = "Convert to Images (PNG ZIP)"
             # Check availability
             if (src in {"pptx", "xlsx"} and tgt == "pdf") and not has_lo:
                 options.append({
                     "format": tgt,
-                    "label": f"Convert to {tgt.upper()}",
+                    "label": label,
                     "available": False,
                     "approximate": False,
                     "note": "Requires LibreOffice engine on server",
@@ -698,7 +722,7 @@ def get_conversion_options(source_extension: str) -> list[dict[str, Any]]:
                 is_approx = tgt in APPROXIMATE_FORMATS or (src == "xlsx" and tgt == "docx")
                 options.append({
                     "format": tgt,
-                    "label": f"Convert to {tgt.upper()}",
+                    "label": label,
                     "available": True,
                     "approximate": is_approx,
                     "note": "Layout is approximate - review the result." if is_approx else "",
@@ -760,7 +784,10 @@ def run_chatbot_conversion(
 
     out_bytes, media_type, approximate = converter(data, source_filename)
     base_name = Path(source_filename).stem
-    out_filename = f"{base_name}.{tgt}"
+    if media_type == "application/zip":
+        out_filename = f"{base_name}.zip"
+    else:
+        out_filename = f"{base_name}.{tgt}"
 
     return ConversionResult(out_bytes, media_type, out_filename, approximate)
 

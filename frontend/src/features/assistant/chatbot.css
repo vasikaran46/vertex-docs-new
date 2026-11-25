@@ -844,3 +844,132 @@
     transition: none !important;
   }
 }
+
+/* Drag and Drop Overlay */
+.chat-drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  border: 2px dashed var(--primary, #059669);
+  border-radius: 12px;
+  color: var(--text, #111827);
+  pointer-events: none;
+}
+
+[data-theme='dark'] .chat-drag-overlay {
+  background: rgba(17, 24, 39, 0.94);
+  color: #f1f5f9;
+}
+
+.chat-drag-overlay b {
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+.chat-drag-overlay small {
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+  margin-top: 2px;
+}
+
+/* Choose from My Documents Picker */
+.chat-doc-picker-modal {
+  background: var(--surface, #ffffff);
+  border-top: 1px solid var(--border, #e2e8f0);
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  padding: 10px 12px;
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-doc-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text, #111827);
+}
+
+.chat-doc-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-muted, #f8fafc);
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.chat-doc-picker-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  width: 100%;
+  color: var(--text, #111827);
+}
+
+.chat-doc-picker-list {
+  overflow-y: auto;
+  max-height: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-doc-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+  width: 100%;
+}
+
+.chat-doc-picker-item:hover {
+  background: var(--surface-muted, #f1f5f9);
+}
+
+.chat-doc-picker-item-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.chat-doc-picker-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-doc-picker-item-meta {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+
+.chat-doc-picker-empty {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted, #64748b);
+  padding: 14px 0;
+}

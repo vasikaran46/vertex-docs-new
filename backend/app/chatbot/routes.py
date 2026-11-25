@@ -16,8 +16,9 @@ from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db, SessionLocal
 from ..activity import record_activity
-from ..models import AssistantConversation, AssistantMessage
+from ..models import AssistantConversation, AssistantMessage, Document
 from ..security import current_user
+from ..storage_service import read_document
 from .attachments import (
     ingest_attachment,
     get_attachment,
@@ -115,6 +116,11 @@ class ChatMessageIn(BaseModel):
 
 class RenameConversationIn(BaseModel):
     title: str = Field(min_length=1, max_length=120)
+
+
+class AttachFromDocumentIn(BaseModel):
+    document_id: int
+    conversation_id: int | None = None
 
 
 def _get_owned_conversation(conversation_id: int, db: Session, user_id: int) -> AssistantConversation:
@@ -235,6 +241,34 @@ async def upload_attachment(
         content_type=file.content_type or "application/octet-stream",
         owner_id=u.id,
         conversation_id=conversation_id,
+    )
+    return record
+
+
+@router.post("/attachments/from-document")
+def attach_from_workspace_document(
+    payload: AttachFromDocumentIn,
+    db: Session = Depends(get_db),
+    u = Depends(current_user),
+):
+    """
+    Attach an existing stored document from the user's workspace to the chatbot.
+    """
+    doc = db.query(Document).filter_by(id=payload.document_id, owner_id=u.id).first()
+    if not doc:
+        raise HTTPException(404, "Document not found in your workspace.")
+
+    try:
+        content = read_document(doc.stored_name)
+    except Exception as e:
+        raise HTTPException(404, f"Could not read document from storage: {e}")
+
+    record = ingest_attachment(
+        filename=doc.original_name,
+        content=content,
+        content_type=doc.content_type or "application/octet-stream",
+        owner_id=u.id,
+        conversation_id=payload.conversation_id,
     )
     return record
 

@@ -23,6 +23,8 @@ import {
   ArrowRightLeft,
   RefreshCw,
   History,
+  FolderOpen,
+  Search,
 } from 'lucide-react';
 import { MarkdownMessage, DownloadCard, DownloadCardProps } from './MarkdownMessage';
 import './chatbot.css';
@@ -176,6 +178,19 @@ export function VertexAssistant({
     note?: string;
   }>>([]);
   const [conversionBusy, setConversionBusy] = useState(false);
+
+  // Document picker & drag-and-drop state
+  const [showDocPicker, setShowDocPicker] = useState(false);
+  const [workspaceDocs, setWorkspaceDocs] = useState<Array<{
+    id: number;
+    original_name: string;
+    size: number;
+    content_type?: string;
+    created_at?: string;
+  }>>([]);
+  const [docSearch, setDocSearch] = useState('');
+  const [docPickerLoading, setDocPickerLoading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Rename conversation state
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
@@ -455,10 +470,16 @@ export function VertexAssistant({
   };
 
   const getDiagnosticError = async (err: unknown, statusCode?: number): Promise<string> => {
-    if (statusCode === 401) return 'Session expired. Please sign in again.';
+    if (statusCode === 401) return 'Please sign in to chat or convert documents.';
+    if (statusCode === 403) return 'Access forbidden: you do not have permission for this file.';
+    if (statusCode === 404) return 'The requested file or attachment was not found.';
     if (statusCode === 413) return 'File too large (maximum 50 MB allowed).';
-    if (statusCode === 415) return 'Unsupported file format for this operation.';
-    if (statusCode === 503) return 'AI Provider not configured (add LLM_API_KEY to backend/.env).';
+    if (statusCode === 415) return 'Unsupported file format. Supported: PDF, DOCX, TXT, MD, PPTX, XLSX, PNG, JPG, JPEG, WEBP.';
+    if (statusCode === 422) return 'Invalid request. Please verify the document format and input.';
+    if (statusCode === 502 || statusCode === 503) {
+      return 'AI service is temporarily unavailable (LLM_API_KEY missing or provider error). Non-AI conversions and file tools are still available.';
+    }
+    if (statusCode === 500) return 'Internal server error. Please try again.';
 
     const isFetchErr =
       err instanceof TypeError ||
@@ -481,13 +502,19 @@ export function VertexAssistant({
   };
 
   const parseErrorMessage = (err: unknown, statusCode?: number): string => {
-    if (statusCode === 401) return 'Session expired. Please sign in again.';
+    if (statusCode === 401) return 'Please sign in to chat or convert documents.';
+    if (statusCode === 403) return 'Access forbidden: you do not have permission for this file.';
+    if (statusCode === 404) return 'The requested file or attachment was not found.';
     if (statusCode === 413) return 'File too large (maximum 50 MB allowed).';
-    if (statusCode === 415) return 'Unsupported file format for this operation.';
-    if (statusCode === 503) return 'AI Provider not configured (add LLM_API_KEY to backend/.env).';
+    if (statusCode === 415) return 'Unsupported file format. Supported: PDF, DOCX, TXT, MD, PPTX, XLSX, PNG, JPG, JPEG, WEBP.';
+    if (statusCode === 422) return 'Invalid request. Please verify the document format and input.';
+    if (statusCode === 502 || statusCode === 503) {
+      return 'AI service is temporarily unavailable (LLM_API_KEY missing or provider error). Non-AI conversions and file tools are still available.';
+    }
+    if (statusCode === 500) return 'Internal server error. Please try again.';
 
     if (err instanceof TypeError || (err instanceof Error && err.message.toLowerCase().includes('failed to fetch'))) {
-      return "Can't reach the server - is the backend running on http://localhost:8000?";
+      return `Can't reach the server - is the backend running on ${api || 'http://localhost:8000'}?`;
     }
     if (err instanceof Error) {
       return err.message;
@@ -613,14 +640,28 @@ export function VertexAssistant({
     }
   };
 
-  // Attachment upload
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !token) return;
-    event.target.value = '';
+  // Unified File Selection Handler with Strict Validation
+  const handleFileSelected = async (file: File) => {
+    if (!token) {
+      setErrorMsg('Please sign in to attach and analyze documents.');
+      return;
+    }
+
+    if (file.size === 0) {
+      setErrorMsg('The attached file is empty (0 bytes). Please upload a valid document.');
+      return;
+    }
 
     if (file.size > 50 * 1024 * 1024) {
-      setErrorMsg('File exceeds 50 MB limit.');
+      setErrorMsg('File exceeds the 50 MB limit.');
+      return;
+    }
+
+    const extMatch = file.name.match(/\.[^.]+$/);
+    const ext = extMatch ? extMatch[0].toLowerCase() : '';
+    const allowed = ['.pdf', '.docx', '.txt', '.md', '.pptx', '.ppt', '.xlsx', '.xls', '.png', '.jpg', '.jpeg', '.webp'];
+    if (!allowed.includes(ext)) {
+      setErrorMsg(`Unsupported file type '${ext || file.type}'. Supported formats: PDF, DOCX, TXT, MD, PPTX, XLSX, PNG, JPG, JPEG, WEBP.`);
       return;
     }
 
@@ -658,16 +699,102 @@ export function VertexAssistant({
       const attInfo = (await res.json()) as AttachmentInfo;
       setActiveAttachment(attInfo);
 
-      // Set smart default conversion target
-      const ext = attInfo.extension.toLowerCase();
-      if (ext === '.docx' || ext === '.txt' || ext === '.md' || attInfo.is_image) {
+      // Smart default target
+      const e = attInfo.extension.toLowerCase();
+      if (e === '.docx' || e === '.txt' || e === '.md' || attInfo.is_image) {
         setConversionFormat('pdf');
-      } else if (ext === '.pdf') {
+      } else if (e === '.pdf') {
         setConversionFormat('docx');
       }
 
       if (attInfo.is_scanned) {
-        setNotice('Notice: This PDF contains scanned images or no selectable text (OCR not available).');
+        setNotice('Notice: This PDF contains scanned images or no selectable text. OCR was applied where available.');
+      }
+    } catch (e) {
+      setErrorMsg(parseErrorMessage(e));
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    void handleFileSelected(file);
+  };
+
+  // Open stored workspace documents picker
+  const openDocPicker = async () => {
+    if (!token) {
+      setErrorMsg('Please sign in to browse your workspace documents.');
+      return;
+    }
+    setShowDocPicker(true);
+    setDocPickerLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch(`${api}/api/documents`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const docs = await res.json();
+        setWorkspaceDocs(Array.isArray(docs) ? docs : []);
+      } else {
+        throw new Error(`Could not load documents (${res.status})`);
+      }
+    } catch (err) {
+      console.warn('Failed to load documents:', err);
+      setErrorMsg(parseErrorMessage(err));
+    } finally {
+      setDocPickerLoading(false);
+    }
+  };
+
+  const handleAttachWorkspaceDoc = async (docId: number) => {
+    if (!token) return;
+    setAttachmentUploading(true);
+    setShowDocPicker(false);
+    setErrorMsg('');
+    try {
+      let convId = activeChatId;
+      if (!convId) {
+        const newChat = await fetch(`${api}/api/chat/conversations`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const created = (await newChat.json()) as ChatConversation;
+        convId = created.id;
+        setActiveChatId(created.id);
+        setConversations((prev) => [created, ...prev]);
+      }
+
+      const res = await fetch(`${api}/api/chat/attachments/from-document`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ document_id: docId, conversation_id: convId }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Attachment failed (${res.status})`);
+      }
+
+      const attInfo = (await res.json()) as AttachmentInfo;
+      setActiveAttachment(attInfo);
+
+      const e = attInfo.extension.toLowerCase();
+      if (e === '.docx' || e === '.txt' || e === '.md' || attInfo.is_image) {
+        setConversionFormat('pdf');
+      } else if (e === '.pdf') {
+        setConversionFormat('docx');
+      }
+
+      if (attInfo.is_scanned) {
+        setNotice('Notice: This PDF contains scanned images or no selectable text. OCR was applied where available.');
       }
     } catch (e) {
       setErrorMsg(parseErrorMessage(e));
@@ -678,7 +805,22 @@ export function VertexAssistant({
 
   // Direct server-side conversion (Convert button / dropdown)
   const handleConvertAttachment = async () => {
-    if (!token || !activeAttachment || conversionBusy) return;
+    if (!token) {
+      setErrorMsg('Please sign in to convert documents.');
+      return;
+    }
+    if (!activeAttachment) {
+      setErrorMsg('Please attach a file or select one from your documents before converting.');
+      return;
+    }
+    if (conversionBusy) return;
+
+    const chosenOpt = conversionOptions.find((o) => o.format === conversionFormat);
+    if (chosenOpt && !chosenOpt.available) {
+      setErrorMsg(chosenOpt.note || 'This conversion option is not currently available on the server.');
+      return;
+    }
+
     setConversionBusy(true);
     setErrorMsg('');
     const sourceFilename = activeAttachment.filename;
@@ -754,8 +896,15 @@ export function VertexAssistant({
   const sendMessage = async (overridePrompt?: string, action?: string) => {
     const textToSend = (overridePrompt || input).trim();
     if (!textToSend && !activeAttachment && !action) return;
+
     if (!token) {
-      setNotice('Sign in to chat with Vertex Assistant.');
+      setErrorMsg('Please sign in to chat or analyze documents.');
+      return;
+    }
+
+    const isDocSpecific = Boolean(action) || /(?:summarize|summary|explain|key\s*points?|translate\s+this|convert\s+this)/i.test(textToSend);
+    if (isDocSpecific && !activeAttachment) {
+      setErrorMsg('Please attach a document or choose one from your documents first.');
       return;
     }
 
@@ -1134,7 +1283,35 @@ export function VertexAssistant({
         </aside>
 
         {/* Main Chat Area */}
-        <div className="assistant-chat-main">
+        <div
+          className="assistant-chat-main"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setIsDragOver(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file) void handleFileSelected(file);
+          }}
+        >
+          {isDragOver && (
+            <div className="chat-drag-overlay" role="presentation">
+              <UploadCloud size={36} style={{ color: 'var(--primary, #059669)', marginBottom: 8 }} />
+              <b>Drop file here to attach</b>
+              <small>Accepts PDF, DOCX, TXT, MD, PPTX, XLSX, PNG, JPG, JPEG, WEBP</small>
+            </div>
+          )}
           <div className="assistant-messages">
             {!messages.length && (
               <div className="assistant-welcome">
@@ -1316,15 +1493,23 @@ export function VertexAssistant({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={attachmentUploading}
-          title="Upload PDF, DOCX, TXT, MD or image"
+          title="Upload PDF, DOCX, TXT, MD, PPTX, XLSX, PNG, JPG, JPEG or WEBP"
         >
           <UploadCloud size={14} />
           {attachmentUploading ? 'Uploading…' : 'Attach file or image'}
         </button>
+        <button
+          onClick={() => void openDocPicker()}
+          disabled={attachmentUploading}
+          title="Choose from my stored workspace documents"
+        >
+          <FolderOpen size={14} />
+          Choose from my documents
+        </button>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx,.txt,.md,image/png,image/jpeg,image/webp"
+          accept=".pdf,.docx,.txt,.md,.pptx,.xlsx,.png,.jpg,.jpeg,.webp"
           hidden
           onChange={handleFileUpload}
         />
@@ -1379,6 +1564,63 @@ export function VertexAssistant({
         </button>
       </div>
 
+      {/* Choose from my documents picker dialog */}
+      {showDocPicker && (
+        <div className="chat-doc-picker-modal" role="dialog" aria-label="Choose from my documents">
+          <div className="chat-doc-picker-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FolderOpen size={15} style={{ color: 'var(--primary, #059669)' }} />
+              <b>Choose from my documents</b>
+            </div>
+            <button
+              onClick={() => setShowDocPicker(false)}
+              className="chat-close-btn"
+              aria-label="Close document picker"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="chat-doc-picker-search">
+            <Search size={14} style={{ color: 'var(--text-muted, #666)' }} />
+            <input
+              type="text"
+              placeholder="Search documents by name…"
+              value={docSearch}
+              onChange={(e) => setDocSearch(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="chat-doc-picker-list">
+            {docPickerLoading ? (
+              <div className="chat-doc-picker-empty">Loading your documents…</div>
+            ) : workspaceDocs.filter((d) => !docSearch || d.original_name.toLowerCase().includes(docSearch.toLowerCase())).length === 0 ? (
+              <div className="chat-doc-picker-empty">
+                {docSearch ? 'No matching documents found.' : 'No documents in your workspace yet.'}
+              </div>
+            ) : (
+              workspaceDocs
+                .filter((d) => !docSearch || d.original_name.toLowerCase().includes(docSearch.toLowerCase()))
+                .map((doc) => (
+                  <button
+                    key={doc.id}
+                    className="chat-doc-picker-item"
+                    onClick={() => void handleAttachWorkspaceDoc(doc.id)}
+                    title={`Select ${doc.original_name}`}
+                  >
+                    <FileText size={15} style={{ color: 'var(--primary, #059669)', flexShrink: 0 }} />
+                    <div className="chat-doc-picker-item-info">
+                      <span className="chat-doc-picker-item-name">{doc.original_name}</span>
+                      <span className="chat-doc-picker-item-meta">
+                        {(doc.size / 1024).toFixed(0)} KB {doc.created_at ? `· ${new Date(doc.created_at).toLocaleDateString()}` : ''}
+                      </span>
+                    </div>
+                  </button>
+                ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Composer */}
       <div className="assistant-compose">
         <label className="language-select">
@@ -1399,6 +1641,13 @@ export function VertexAssistant({
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onPaste={(e) => {
+            const file = e.clipboardData.files?.[0];
+            if (file) {
+              e.preventDefault();
+              void handleFileSelected(file);
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();

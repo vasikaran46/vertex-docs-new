@@ -27,7 +27,9 @@ from .attachments import (
     link_attachment_to_conversation,
     build_system_prompt,
     format_chat_prompt,
+    summarize_document_map_reduce,
 )
+from .config import get_llm_config, get_fallback_models
 from .convert import get_conversion_options
 from .tools import (
     CHATBOT_TOOL_SCHEMAS,
@@ -46,41 +48,116 @@ async def _empty_lines():
     yield  # pragma: no cover
 
 
-async def llm_chat(client: httpx.AsyncClient, base: str, key: str, messages: list[dict[str, Any]], tools: list | None = None) -> tuple[dict[str, Any], str]:
-    """Call the chat model with fallbacks.
-
-    Tries every model from LLM_MODEL (comma separated; free OpenRouter fallbacks are appended when all are ':free').
-    For each model, if the provider rejects the `tools` parameter (many free models do), it retries without tools.
-    Returns (response_json, model_used). Raises 502 with the per-model reasons if everything fails.
+@router.get("/health")
+async def chat_health():
     """
-    from ..routers.ai import llm_models
+    Checks if an LLM key is configured and performs a lightweight test call.
+    Returns { "ok": True/False, "provider": provider, "model": model }.
+    """
+    cfg = get_llm_config()
+    if not cfg["is_configured"]:
+        return {
+            "ok": False,
+            "provider": cfg["provider"],
+            "model": cfg["model"],
+            "error": "AI API key is missing. Set LLM_API_KEY (or GROQ_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY) in backend/.env",
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                cfg["base_url"] + "/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['key']}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": cfg["model"],
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 5,
+                },
+            )
+            if resp.status_code == 200:
+                return {
+                    "ok": True,
+                    "provider": cfg["provider"],
+                    "model": cfg["model"],
+                }
+            if resp.status_code in (401, 403):
+                return {
+                    "ok": False,
+                    "provider": cfg["provider"],
+                    "model": cfg["model"],
+                    "error": f"AI provider rejected the API key (HTTP {resp.status_code}). Check your key in backend/.env.",
+                }
+            return {
+                "ok": False,
+                "provider": cfg["provider"],
+                "model": cfg["model"],
+                "error": f"Provider HTTP {resp.status_code}: {resp.text[:120]}",
+            }
+    except Exception as e:
+        return {
+            "ok": False,
+            "provider": cfg["provider"],
+            "model": cfg["model"],
+            "error": f"Could not connect to AI provider: {str(e)}",
+        }
+
+
+async def llm_chat(
+    client: httpx.AsyncClient,
+    base: str,
+    key: str,
+    messages: list[dict[str, Any]],
+    tools: list | None = None,
+    temperature: float = 0.3,
+    preferred_model: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    """Call the chat model with configured fallbacks and error handling.
+    """
+    cfg = get_llm_config()
+    models = get_fallback_models(preferred_model or cfg["model"], cfg["provider"])
 
     problems: list[str] = []
-    for model in llm_models():
+    for model in models:
         for use_tools in ([True, False] if tools else [False]):
-            body: dict[str, Any] = {"model": model, "messages": messages}
+            body: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+            }
             if use_tools:
                 body["tools"] = tools
                 body["tool_choice"] = "auto"
             try:
-                response = await client.post(base + "/chat/completions", headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json=body)
+                response = await client.post(
+                    base + "/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=body,
+                )
             except httpx.RequestError as error:
                 problems.append(f"{model}: could not connect ({error.__class__.__name__})")
                 break
+
             if response.status_code == 200:
                 try:
                     data = response.json()
                     data["choices"][0]["message"]
                     return data, model
                 except (ValueError, KeyError, IndexError, TypeError):
-                    problems.append(f"{model}: unexpected response")
+                    problems.append(f"{model}: unexpected response shape")
                     break
+
             problems.append(f"{model}: HTTP {response.status_code} {response.text[:120]}")
             if response.status_code in (401, 403):
-                raise HTTPException(502, "The AI provider rejected LLM_API_KEY. Check the key and LLM_BASE_URL in backend/.env.")
+                raise HTTPException(401, "AI service key is missing or invalid. Check backend/.env.")
+            if response.status_code == 429:
+                raise HTTPException(429, "Too many requests to AI service. Please try again in a moment.")
             if use_tools and response.status_code in (400, 404, 422):
                 continue  # retry the same model without tool calling
             break
+
     raise HTTPException(502, "No configured AI model answered. " + " | ".join(problems[-3:]))
 
 
@@ -356,6 +433,7 @@ async def convert_attachment_direct(
     }
 
 
+@router.post("")
 @router.post("/message")
 async def send_chat_message(
     payload: ChatMessageIn,
@@ -363,10 +441,10 @@ async def send_chat_message(
     u = Depends(current_user),
 ):
     """
-    Primary chatbot message endpoint:
+    Primary chatbot message endpoint (available at both /api/chat and /api/chat/message):
     1. Deterministic fast-path conversion (no LLM risk).
-    2. Server-side tool execution loop with OpenRouter.
-    3. Document context injection.
+    2. Document summarization (map-reduce for long files).
+    3. LLM completion with document context and tool calling.
     """
     # 1. Ensure conversation exists
     conv = (
@@ -416,13 +494,14 @@ async def send_chat_message(
 
             if payload.stream:
                 async def stream_artifact():
-                    yield f"data: {json.dumps({'token': reply_text, 'artifacts': [artifact]})}\n\n"
+                    yield f"data: {json.dumps({'token': reply_text, 'delta': reply_text, 'artifacts': [artifact]})}\n\n"
                     yield f"data: {json.dumps({'done': True, 'reply': reply_text, 'artifacts': [artifact], 'conversation_id': conv_id, 'title': conv_title})}\n\n"
 
                 return StreamingResponse(stream_artifact(), media_type="text/event-stream")
 
             return {
                 "text": reply_text,
+                "reply": reply_text,
                 "artifacts": [artifact],
                 "conversation_id": conv_id,
                 "title": conv_title,
@@ -431,21 +510,131 @@ async def send_chat_message(
             err_msg = f"Conversion error: {e.detail}"
             if payload.stream:
                 async def stream_err():
-                    yield f"data: {json.dumps({'error': err_msg})}\n\n"
+                    yield f"data: {json.dumps({'error': err_msg, 'code': e.status_code})}\n\n"
                 return StreamingResponse(stream_err(), media_type="text/event-stream")
             raise
 
-    # 4. LLM Completion with Server-Side Function Calling
-    key = os.getenv("LLM_API_KEY", "").strip()
-    if not key:
-        raise HTTPException(503, "Add LLM_API_KEY to backend/.env")
-    base = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    model = os.getenv("LLM_MODEL", "gpt-4o-mini")  # first choice; llm_chat() applies the full fallback list
+    # 4. Check LLM Configuration
+    cfg = get_llm_config()
+    if not cfg["is_configured"]:
+        raise HTTPException(503, "Add LLM_API_KEY (or GROQ_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY) to backend/.env")
 
+    base = cfg["base_url"]
+    key = cfg["key"]
+    model = cfg["model"]
+    temperature = cfg["temperature"]
+    timeout_sec = cfg["timeout"]
+
+    # 5. Summarization Request Handler
+    is_summarize = (
+        payload.action == "summarize"
+        or (fastpath and fastpath[0] == "summarize")
+        or payload.text.strip().lower().startswith(("/summarize", "summarize", "summarise"))
+    )
+
+    if is_summarize:
+        if attachments:
+            target_att = attachments[0]
+            if target_att.get("is_scanned") and (not target_att.get("extracted_text") or "OCR not available" in target_att.get("extracted_text", "")):
+                summary_reply = "OCR not available: this document appears to be a scanned image or contains no selectable text. Please upload a document with readable text or perform OCR before summarizing."
+            else:
+                raw_text = target_att.get("extracted_text", "").strip()
+                if not raw_text:
+                    summary_reply = f"The attached file **{target_att['filename']}** contains no extractable text to summarize."
+                else:
+                    try:
+                        async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                            summary_reply = await summarize_document_map_reduce(
+                                raw_text=raw_text,
+                                filename=target_att["filename"],
+                                language=payload.language,
+                                llm_caller=llm_chat,
+                                client=client,
+                                base=base,
+                                key=key,
+                                model=model,
+                            )
+                    except HTTPException as e:
+                        if payload.stream:
+                            async def stream_sum_err():
+                                yield f"data: {json.dumps({'error': e.detail, 'code': e.status_code})}\n\n"
+                            return StreamingResponse(stream_sum_err(), media_type="text/event-stream")
+                        raise
+        else:
+            # No attachment: check previous assistant message or pasted text
+            last_assistant_msg = (
+                db.query(AssistantMessage)
+                .filter_by(conversation_id=conv_id, role="assistant")
+                .order_by(desc(AssistantMessage.id))
+                .first()
+            )
+            clean_text = re.sub(r"^/?summar(?:ize|ise)\s*", "", payload.text, flags=re.IGNORECASE).strip()
+            if clean_text and len(clean_text) > 30:
+                try:
+                    async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                        summary_reply = await summarize_document_map_reduce(
+                            raw_text=clean_text,
+                            filename="Pasted Text",
+                            language=payload.language,
+                            llm_caller=llm_chat,
+                            client=client,
+                            base=base,
+                            key=key,
+                            model=model,
+                        )
+                except HTTPException as e:
+                    if payload.stream:
+                        async def stream_sum_err():
+                            yield f"data: {json.dumps({'error': e.detail, 'code': e.status_code})}\n\n"
+                        return StreamingResponse(stream_sum_err(), media_type="text/event-stream")
+                    raise
+            elif last_assistant_msg and last_assistant_msg.content:
+                try:
+                    async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                        summary_reply = await summarize_document_map_reduce(
+                            raw_text=last_assistant_msg.content,
+                            filename="Previous Message",
+                            language=payload.language,
+                            llm_caller=llm_chat,
+                            client=client,
+                            base=base,
+                            key=key,
+                            model=model,
+                        )
+                except HTTPException as e:
+                    if payload.stream:
+                        async def stream_sum_err():
+                            yield f"data: {json.dumps({'error': e.detail, 'code': e.status_code})}\n\n"
+                        return StreamingResponse(stream_sum_err(), media_type="text/event-stream")
+                    raise
+            else:
+                summary_reply = "Please attach a document or ask a question first to summarize."
+
+        db.add(AssistantMessage(conversation_id=conv_id, role="user", content=payload.text or "Summarize document"))
+        db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=summary_reply))
+        conv.updated_at = datetime.utcnow()
+        db.commit()
+
+        if payload.stream:
+            async def stream_summary():
+                yield f"data: {json.dumps({'token': summary_reply, 'delta': summary_reply})}\n\n"
+                yield f"data: {json.dumps({'done': True, 'reply': summary_reply, 'artifacts': [], 'conversation_id': conv_id, 'title': conv_title})}\n\n"
+
+            return StreamingResponse(stream_summary(), media_type="text/event-stream")
+
+        return {
+            "text": summary_reply,
+            "reply": summary_reply,
+            "artifacts": [],
+            "conversation_id": conv_id,
+            "title": conv_title,
+        }
+
+    # 6. Standard Conversational Prompt with Document Context & History
     system_instruction = build_system_prompt(payload.language)
     msgs: list[dict[str, Any]] = [{"role": "system", "content": system_instruction}]
 
-    # Load history
+    # Load history (trimmed to last 10 messages for context budget)
     previous = (
         db.query(AssistantMessage)
         .filter_by(conversation_id=conv_id)
@@ -468,9 +657,10 @@ async def send_chat_message(
             artifacts_collected = []
             reply_accumulator = []
             try:
-                async with httpx.AsyncClient(timeout=90) as client:
-                    # 1. Initial request with tools (falls back across models / without tools)
-                    resp_data, model = await llm_chat(client, base, key, msgs, CHATBOT_TOOL_SCHEMAS)
+                async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                    resp_data, model_used = await llm_chat(
+                        client, base, key, msgs, CHATBOT_TOOL_SCHEMAS, temperature=temperature, preferred_model=model
+                    )
                     choice = resp_data["choices"][0]
                     message = choice["message"]
 
@@ -509,13 +699,13 @@ async def send_chat_message(
                             "POST",
                             base + "/chat/completions",
                             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                            json={"model": model, "messages": msgs, "stream": True},
+                            json={"model": model_used, "messages": msgs, "stream": True, "temperature": temperature},
                         ) as follow_up_resp:
                             if follow_up_resp.status_code != 200:
-                                fallback_data, _ = await llm_chat(client, base, key, msgs)
+                                fallback_data, _ = await llm_chat(client, base, key, msgs, temperature=temperature, preferred_model=model)
                                 fallback_text = fallback_data["choices"][0]["message"].get("content") or ""
                                 reply_accumulator.append(fallback_text)
-                                yield f"data: {json.dumps({'token': fallback_text})}\n\n"
+                                yield f"data: {json.dumps({'token': fallback_text, 'delta': fallback_text})}\n\n"
                                 provider_stream_completed = True
                             async for line in (follow_up_resp.aiter_lines() if follow_up_resp.status_code == 200 else _empty_lines()):
                                 if line.startswith("data: "):
@@ -528,17 +718,17 @@ async def send_chat_message(
                                         delta = p["choices"][0]["delta"].get("content", "")
                                         if delta:
                                             reply_accumulator.append(delta)
-                                            yield f"data: {json.dumps({'token': delta})}\n\n"
+                                            yield f"data: {json.dumps({'token': delta, 'delta': delta})}\n\n"
                                     except Exception:
                                         pass
                         if not provider_stream_completed:
-                            yield f"data: {json.dumps({'error': 'Assistant error: AI provider stream ended before completion.'})}\n\n"
+                            yield f"data: {json.dumps({'error': 'Assistant error: AI provider stream ended before completion.', 'code': 500})}\n\n"
                             return
                     else:
                         # Direct content without tool call
                         content = message.get("content") or ""
                         reply_accumulator.append(content)
-                        yield f"data: {json.dumps({'token': content})}\n\n"
+                        yield f"data: {json.dumps({'token': content, 'delta': content})}\n\n"
 
                 final_text = "".join(reply_accumulator)
                 with SessionLocal() as save_db:
@@ -567,16 +757,16 @@ async def send_chat_message(
                 yield f"data: {json.dumps({'done': True, 'reply': final_text, 'artifacts': artifacts_collected, 'conversation_id': conv_id, 'title': title_res})}\n\n"
 
             except HTTPException as e:
-                yield f"data: {json.dumps({'error': e.detail})}\n\n"
+                yield f"data: {json.dumps({'error': e.detail, 'code': e.status_code})}\n\n"
             except Exception as e:
                 logger.exception("Error in send_chat_message stream")
-                yield f"data: {json.dumps({'error': f'Assistant error: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'error': f'Assistant error: {str(e)}', 'code': 500})}\n\n"
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
     # Non-streaming fallback
-    async with httpx.AsyncClient(timeout=90) as client:
-        resp_data, model = await llm_chat(client, base, key, msgs, CHATBOT_TOOL_SCHEMAS)
+    async with httpx.AsyncClient(timeout=timeout_sec) as client:
+        resp_data, model_used = await llm_chat(client, base, key, msgs, CHATBOT_TOOL_SCHEMAS, temperature=temperature, preferred_model=model)
         message = resp_data["choices"][0]["message"]
         artifacts = []
 
@@ -598,7 +788,7 @@ async def send_chat_message(
                     artifacts.append(t_art)
                 msgs.append({"role": "tool", "tool_call_id": tool_call["id"], "content": json.dumps(t_res)})
 
-            follow_up, _ = await llm_chat(client, base, key, msgs)
+            follow_up, _ = await llm_chat(client, base, key, msgs, temperature=temperature, preferred_model=model)
             final_text = follow_up["choices"][0]["message"].get("content") or ""
         else:
             final_text = message.get("content") or ""
@@ -614,6 +804,7 @@ async def send_chat_message(
 
         return {
             "text": final_text,
+            "reply": final_text,
             "artifacts": artifacts,
             "conversation_id": conv_id,
             "title": conv.title,

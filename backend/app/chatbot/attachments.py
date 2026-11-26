@@ -391,3 +391,89 @@ def format_chat_prompt(
         return multimodal_content, attached_names
 
     return full_text_prompt, attached_names
+
+
+SUMMARY_SYSTEM_PROMPT = """You are an expert document summarizer.
+Your goal is to extract the most important facts, decisions, and context from the provided text and format your answer exactly as follows:
+
+### Overview
+A concise 1-line overview stating the core purpose, topic, and conclusion of the document.
+
+### Key Points
+- [Key point 1]
+- [Key point 2]
+- [Key point 3]
+- [Key point 4]
+(Provide 4 to 6 clear, high-signal bullet points)
+
+### Important Details
+- **Key Dates**: [List any deadlines, meeting dates, or effective dates, or "None specified"]
+- **Key Names & Entities**: [List key people, organizations, or products, or "None specified"]
+
+Reply in {language_description}. Be clear, accurate, and direct without meta-commentary.
+"""
+
+
+async def summarize_document_map_reduce(
+    raw_text: str,
+    filename: str,
+    language: str,
+    llm_caller,
+    client,
+    base: str,
+    key: str,
+    model: str,
+) -> str:
+    """
+    Summarizes document text respecting context limits using map-reduce when needed.
+    """
+    lang_desc = (
+        "Tanglish (spoken Tamil in Latin letters mixed with common English words)"
+        if language == "tanglish"
+        else language
+    )
+    sys_prompt = SUMMARY_SYSTEM_PROMPT.format(language_description=lang_desc)
+
+    # Fast path for standard document lengths (up to 12,000 characters)
+    if len(raw_text) <= 12000:
+        user_prompt = f"Please summarize the following document ({filename}):\n\n{raw_text}"
+        messages = [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        data, _ = await llm_caller(client, base, key, messages, preferred_model=model)
+        return data["choices"][0]["message"].get("content", "")
+
+    # Map-Reduce for large documents
+    chunk_size = 5000
+    chunks = [raw_text[i : i + chunk_size] for i in range(0, len(raw_text), chunk_size)]
+    if len(chunks) > 6:
+        chunks = chunks[:3] + [chunks[len(chunks) // 2]] + chunks[-2:]
+
+    # Map stage
+    section_summaries: list[str] = []
+    for idx, chunk in enumerate(chunks, 1):
+        map_prompt = f"Extract key points, findings, and any dates or names from Section {idx} of {filename}:\n\n{chunk}"
+        map_msgs = [
+            {"role": "system", "content": f"Extract concise bullet points and any names/dates. Reply in {lang_desc}."},
+            {"role": "user", "content": map_prompt},
+        ]
+        try:
+            map_data, _ = await llm_caller(client, base, key, map_msgs, preferred_model=model)
+            sec_summary = map_data["choices"][0]["message"].get("content", "")
+            if sec_summary:
+                section_summaries.append(f"Section {idx} Notes:\n{sec_summary}")
+        except Exception as e:
+            logger.warning("Error summarizing chunk %d: %s", idx, e)
+
+    combined_sections = "\n\n".join(section_summaries) if section_summaries else raw_text[:10000]
+
+    # Reduce stage
+    reduce_prompt = f"Synthesize these section notes from {filename} into the final structured executive summary:\n\n{combined_sections}"
+    reduce_msgs = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": reduce_prompt},
+    ]
+    reduce_data, _ = await llm_caller(client, base, key, reduce_msgs, preferred_model=model)
+    return reduce_data["choices"][0]["message"].get("content", "")
+

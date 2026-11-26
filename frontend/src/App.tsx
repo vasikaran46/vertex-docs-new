@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { companions, conversionTools, groups, languages, palettes, tools, type ConversionTool } from './catalogue';
 import { applyTheme, CUSTOM_THEME, readCustomColours, saveCustomColours, themeDef, themeFrom, themes } from './themes';
+import { AnimatePresence } from 'framer-motion';
 import { VertexAssistant } from './features/assistant/VertexAssistant';
 import { AiDocChat } from './features/ai-intelligence/AiDocChat';
 import { supabase } from './lib/supabase';
@@ -4835,23 +4836,36 @@ export default function App() {
           <button aria-label="Dismiss assistant message" onClick={() => setAssistantToast('')}><X size={15} /></button>
         </div>
       )}
-      {page !== 'AI Documents' && <button className="assistant-fab" aria-label="Open Vertex Assistant" onClick={() => setChatOpen((open) => !open)}><span>{companion.emoji}</span><small>AI</small></button>}
-      {page !== 'AI Documents' && chatOpen && (
-        <VertexAssistant
-          api={API}
-          token={token}
-          companion={companion}
-          language={language}
-          languages={languages}
-          onLanguageChange={(lang) => void savePreferences({ language: lang })}
-          onClose={() => setChatOpen(false)}
-          speakText={speakText}
-          isListening={isListening}
-          startVoiceInput={startVoiceInput}
-          voiceFeedback={voiceFeedback}
-          setNotice={setNotice}
-        />
+      {page !== 'AI Documents' && (
+        <button
+          className={`assistant-fab ${chatOpen ? 'active' : ''}`}
+          aria-label={chatOpen ? 'Close Vertex Assistant' : 'Open Vertex Assistant'}
+          aria-expanded={chatOpen}
+          onClick={() => setChatOpen((open) => !open)}
+        >
+          <span>{companion.emoji}</span>
+          <small>AI</small>
+        </button>
       )}
+      <AnimatePresence>
+        {page !== 'AI Documents' && chatOpen && (
+          <VertexAssistant
+            key="vertex-assistant"
+            api={API}
+            token={token}
+            companion={companion}
+            language={language}
+            languages={languages}
+            onLanguageChange={(lang) => void savePreferences({ language: lang })}
+            onClose={() => setChatOpen(false)}
+            speakText={speakText}
+            isListening={isListening}
+            startVoiceInput={startVoiceInput}
+            voiceFeedback={voiceFeedback}
+            setNotice={setNotice}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

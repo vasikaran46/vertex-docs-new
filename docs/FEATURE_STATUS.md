@@ -1,5 +1,15 @@
 # Feature status
 
+## Chat history & persistence
+The floating Vertex Assistant persists all chat conversations in SQLite/PostgreSQL, fully isolated per user account.
+- `GET /api/chat/sessions` — List all chat sessions for the authenticated user (newest first with titles and update timestamps).
+- `POST /api/chat/sessions` — Create a new chat session.
+- `GET /api/chat/sessions/{id}` — Retrieve a chat session and its full message history ordered chronologically.
+- `PATCH /api/chat/sessions/{id}` — Inline rename a chat session (title).
+- `DELETE /api/chat/sessions/{id}` — Delete a chat session with cascading deletion of all associated messages.
+- `POST /api/chat/sessions/{id}/messages` — Append user/assistant messages directly to a session.
+- `POST /api/chat` / `POST /api/chat/message` — Primary chat endpoint: automatically creates and titles new sessions, saves user messages before invoking the LLM, persists completed or partial streaming responses, and returns the session ID and title.
+
 ## Connected to the backend
 - Account signup, login, current-user lookup, and sign-out. Signup starts an authenticated session immediately, the same credentials work after sign-out, and every account keeps its own private documents. The local SQLite database lives in `backend/` regardless of the launch folder.
 - Per-user document upload, listing, download, and deletion.

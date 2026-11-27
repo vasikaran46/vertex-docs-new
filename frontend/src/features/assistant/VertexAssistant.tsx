@@ -106,6 +106,18 @@ const getInitialWindowSize = () => {
   };
 };
 
+function getUserIdFromToken(tok: string | null): string {
+  if (!tok) return 'anon';
+  try {
+    const parts = tok.split('.');
+    if (parts.length >= 2) {
+      const decoded = JSON.parse(atob(parts[1]));
+      return decoded.sub ? String(decoded.sub) : tok.slice(-12);
+    }
+  } catch {}
+  return tok.slice(-12);
+}
+
 export function VertexAssistant({
   api,
   token,
@@ -168,8 +180,9 @@ export function VertexAssistant({
     timer: ReturnType<typeof setTimeout> | null;
   } | null>(null);
 
-  // Scroll-to-bottom indicator
+  // Scroll-to-bottom indicator & bottom tracking
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const isNearBottomRef = useRef(true);
 
   // Rename conversation state
   const [editingTitleId, setEditingTitleId] = useState<number | null>(null);
@@ -445,23 +458,38 @@ export function VertexAssistant({
     } catch {}
   };
 
+  // Lock background scrolling while chat popup is open, restore on close/unmount
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   useEffect(() => {
     if (token) {
       void loadConversations();
     }
   }, [token]);
 
+  // Auto-scroll to newest message on send & token streaming, only if user is near bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, busy]);
 
   const handleTranscriptScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isNearBottom = distanceToBottom <= 80;
+    isNearBottomRef.current = isNearBottom;
     setShowScrollBottom(!isNearBottom);
   };
 
   const scrollToBottom = () => {
+    isNearBottomRef.current = true;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     setShowScrollBottom(false);
   };
@@ -533,22 +561,39 @@ export function VertexAssistant({
     return await getDiagnosticError(null, res.status);
   };
 
+  const storageKey = `vd_chat_active_session_${getUserIdFromToken(token)}`;
+
   const loadConversations = async () => {
     if (!token) return;
     setHistoryBusy(true);
     try {
-      const res = await fetch(`${api}/api/chat/conversations`, {
+      const res = await fetch(`${api}/api/chat/sessions`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const list = (await res.json()) as ChatConversation[];
         setConversations(list);
-        if (list.length > 0 && activeChatId === null) {
+
+        // Check if there is an active session in localStorage that exists in the list
+        let targetId: number | null = null;
+        try {
+          const savedId = localStorage.getItem(storageKey);
+          if (savedId && list.some((c) => c.id === Number(savedId))) {
+            targetId = Number(savedId);
+          }
+        } catch {}
+
+        if (targetId !== null) {
+          void selectConversation(targetId);
+        } else if (list.length > 0 && activeChatId === null) {
           void selectConversation(list[0].id);
         }
+      } else {
+        setNotice('Could not load saved chat history.');
       }
     } catch (err) {
-      console.warn('Could not load chat conversations:', err);
+      console.warn('Could not load chat sessions:', err);
+      setNotice('Could not connect to chat history.');
     } finally {
       setHistoryBusy(false);
     }
@@ -557,22 +602,21 @@ export function VertexAssistant({
   const selectConversation = async (convId: number) => {
     if (!token) return;
     setActiveChatId(convId);
+    try {
+      localStorage.setItem(storageKey, String(convId));
+    } catch {}
     setErrorMsg('');
     setHistoryOpenNarrow(false);
     try {
-      const res = await fetch(`${api}/api/chat/conversations/${convId}/messages`, {
+      const res = await fetch(`${api}/api/chat/sessions/${convId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        const data = (await res.json()) as Array<{
-          id: number;
-          role: 'user' | 'assistant';
-          content: string;
-          created_at: string;
-        }>;
+        const data = await res.json();
+        const rawMsgs = Array.isArray(data) ? data : (data.messages || []);
         setMessages(
-          data.map((m) => {
-            let text = m.content;
+          rawMsgs.map((m: any) => {
+            let text = m.content || m.text || '';
             let downloadCard: DownloadCardProps | undefined;
             const artifacts: DownloadCardProps[] = [];
 
@@ -599,47 +643,29 @@ export function VertexAssistant({
         );
       }
     } catch (err) {
-      console.warn('Could not load messages:', err);
+      console.warn('Could not load session messages:', err);
     }
   };
 
-  const createNewChat = async () => {
-    if (!token) {
-      setActiveChatId(null);
-      setMessages([]);
-      setErrorMsg('');
-      setActiveAttachment(null);
-      return;
-    }
-    setHistoryBusy(true);
+  const createNewChat = () => {
+    setActiveChatId(null);
+    setMessages([]);
+    setErrorMsg('');
+    setActiveAttachment(null);
     try {
-      const res = await fetch(`${api}/api/chat/conversations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title: 'New chat' }),
-      });
-      if (res.ok) {
-        const conv = (await res.json()) as ChatConversation;
-        setConversations((prev) => [conv, ...prev]);
-        setActiveChatId(conv.id);
-        setMessages([]);
-        setErrorMsg('');
-        setActiveAttachment(null);
-      }
-    } catch (err) {
-      console.warn('Failed to create new conversation:', err);
-    } finally {
-      setHistoryBusy(false);
-    }
+      localStorage.removeItem(storageKey);
+    } catch {}
+    textareaRef.current?.focus();
   };
 
   const deleteConversation = async (convId: number) => {
     if (!token) return;
+    const target = conversations.find((c) => c.id === convId);
+    const title = target?.title || 'this chat';
+    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+
     try {
-      const res = await fetch(`${api}/api/chat/conversations/${convId}`, {
+      const res = await fetch(`${api}/api/chat/sessions/${convId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -652,11 +678,14 @@ export function VertexAssistant({
           } else {
             setActiveChatId(null);
             setMessages([]);
+            try {
+              localStorage.removeItem(storageKey);
+            } catch {}
           }
         }
       }
     } catch (err) {
-      console.warn('Failed to delete conversation:', err);
+      console.warn('Failed to delete session:', err);
     }
   };
 
@@ -665,22 +694,23 @@ export function VertexAssistant({
       setEditingTitleId(null);
       return;
     }
+    const newTitle = editTitleText.trim();
     try {
-      const res = await fetch(`${api}/api/chat/conversations/${convId}`, {
+      const res = await fetch(`${api}/api/chat/sessions/${convId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ title: editTitleText.trim() }),
+        body: JSON.stringify({ title: newTitle }),
       });
       if (res.ok) {
         setConversations((prev) =>
-          prev.map((c) => (c.id === convId ? { ...c, title: editTitleText.trim() } : c))
+          prev.map((c) => (c.id === convId ? { ...c, title: newTitle } : c))
         );
       }
     } catch (err) {
-      console.warn('Failed to rename conversation:', err);
+      console.warn('Failed to rename session:', err);
     } finally {
       setEditingTitleId(null);
     }
@@ -943,6 +973,17 @@ export function VertexAssistant({
   const handleRetryFailed = async () => {
     setErrorMsg('');
     if (lastFailedPrompt) {
+      // Clean up any failed empty/error assistant bubble or duplicate user bubble
+      setMessages((prev) => {
+        const list = [...prev];
+        if (list.length > 0 && list[list.length - 1].role === 'assistant') {
+          list.pop();
+        }
+        if (list.length > 0 && list[list.length - 1].role === 'user' && list[list.length - 1].text === lastFailedPrompt) {
+          list.pop();
+        }
+        return list;
+      });
       await sendMessage(lastFailedPrompt);
     }
   };
@@ -976,6 +1017,7 @@ export function VertexAssistant({
     };
     setMessages((prev) => [...prev, userMsg]);
     setBusy(true);
+    isNearBottomRef.current = true;
 
     const assistantMsg: ChatMessage = {
       role: 'assistant',
@@ -987,11 +1029,13 @@ export function VertexAssistant({
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    let accumulatedText = '';
 
     try {
       const payload: any = {
         text: textToSend,
         language,
+        session_id: activeChatId,
         conversation_id: activeChatId,
         stream: true,
       };
@@ -1019,21 +1063,14 @@ export function VertexAssistant({
           console.error('[Vertex Assistant Error]', res.status, errorText);
         }
         setErrorMsg(errorText);
-        setMessages((prev) => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (last && last.role === 'assistant') {
-            last.isStreaming = false;
-            last.text = `Unable to complete request: ${errorText}`;
-          }
-          return copy;
-        });
+        // Remove empty assistant placeholder so error is not duplicated as a chat bubble
+        setMessages((prev) => prev.filter((m) => !m.isStreaming || m.text.length > 0));
         return;
       }
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder('utf-8');
-      let accumulatedText = '';
+      accumulatedText = '';
       let artifacts: DownloadCardProps[] = [];
 
       if (reader) {
@@ -1055,19 +1092,21 @@ export function VertexAssistant({
             try {
               const parsed = JSON.parse(dataStr);
               if (parsed.error) {
-                accumulatedText = `Unable to complete request: ${parsed.error}`;
                 setErrorMsg(parsed.error);
                 if (import.meta.env.DEV) {
                   console.error('[Vertex Assistant Stream Error]', parsed.error);
                 }
                 setMessages((prev) => {
-                  const copy = [...prev];
-                  const last = copy[copy.length - 1];
-                  if (last && last.role === 'assistant') {
-                    last.isStreaming = false;
-                    last.text = accumulatedText;
+                  if (accumulatedText) {
+                    const copy = [...prev];
+                    const last = copy[copy.length - 1];
+                    if (last && last.role === 'assistant') {
+                      last.isStreaming = false;
+                      last.text = accumulatedText;
+                    }
+                    return copy;
                   }
-                  return copy;
+                  return prev.filter((m) => !m.isStreaming);
                 });
                 break;
               }
@@ -1085,8 +1124,17 @@ export function VertexAssistant({
                 });
               } else if (parsed.artifact) {
                 artifacts.push(parsed.artifact);
-              } else if (parsed.done && parsed.reply && !accumulatedText) {
-                accumulatedText = parsed.reply;
+              } else if (parsed.done) {
+                if (parsed.reply && !accumulatedText) {
+                  accumulatedText = parsed.reply;
+                }
+                const newId = parsed.session_id || parsed.conversation_id;
+                if (newId) {
+                  setActiveChatId(newId);
+                  try {
+                    localStorage.setItem(storageKey, String(newId));
+                  } catch {}
+                }
               }
             } catch {}
           }
@@ -1132,13 +1180,16 @@ export function VertexAssistant({
       }
       setErrorMsg(msg);
       setMessages((prev) => {
-        const copy = [...prev];
-        const last = copy[copy.length - 1];
-        if (last && last.role === 'assistant') {
-          last.isStreaming = false;
-          last.text = `Unable to complete request: ${msg}`;
+        if (accumulatedText) {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last && last.role === 'assistant') {
+            last.isStreaming = false;
+            last.text = accumulatedText;
+          }
+          return copy;
         }
-        return copy;
+        return prev.filter((m) => !m.isStreaming);
       });
     } finally {
       setBusy(false);
@@ -1387,6 +1438,17 @@ export function VertexAssistant({
       className="chatbot-layer-portal"
       aria-hidden="false"
     >
+      {/* Dim scrim / backdrop overlay */}
+      <motion.div
+        className="assistant-scrim"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
       {/* LAYER 1: Handles ONLY open/close genie fold animation */}
       <motion.div
         className="assistant-genie-layer"

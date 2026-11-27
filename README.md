@@ -4,6 +4,7 @@ React + TypeScript + Vite frontend; FastAPI backend.
 
 ## Included
 - Persistent signup/login, JWT-protected API, profile preferences, and owner-scoped document access. Creating an account signs you in immediately; after signing out, use the same email and password to return. Multiple people can keep separate accounts on one device, and each account only sees its own documents.
+- Vertex Assistant Chat History & Persistence: Full SQLite/PostgreSQL persistence for chatbot sessions and message history via JWT-protected `/api/chat/sessions` endpoints. Conversations persist across page refreshes, pop-up toggling, and re-login, with complete privacy isolation across accounts.
 - Document upload/list/download/delete.
 - Working PDF info, merge, split, rotate, remove/extract pages, protect/unlock, text extraction and content-stream compression endpoints.
 - AI Documents: summarize a selected workspace file, ask context-aware questions, and translate PDF/DOCX/TXT/Markdown files into any of 12 languages plus Tanglish. AI actions need `LLM_API_KEY`.

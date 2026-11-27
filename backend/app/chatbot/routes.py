@@ -16,7 +16,8 @@ from starlette.concurrency import run_in_threadpool
 
 from ..database import get_db, SessionLocal
 from ..activity import record_activity
-from ..models import AssistantConversation, AssistantMessage, Document
+from ..models import AssistantConversation, AssistantMessage, ChatSession, ChatMessage, Document
+from ..schemas import ChatSessionCreate, ChatSessionRename, ChatMessageCreate, ChatSessionOut, ChatMessageOut, ChatSessionDetailOut
 from ..security import current_user
 from ..storage_service import read_document
 from .attachments import (
@@ -186,6 +187,7 @@ class ChatMessageIn(BaseModel):
     attachment_ids: list[str] = Field(default_factory=list)
     language: Literal["en", "ta", "hi", "ml", "te", "kn", "ja", "de", "sa", "bn", "fr", "es", "tanglish"] = "en"
     conversation_id: int | None = None
+    session_id: int | None = None
     action: str | None = None
     target_format: str | None = None
     stream: bool = True
@@ -198,6 +200,7 @@ class RenameConversationIn(BaseModel):
 class AttachFromDocumentIn(BaseModel):
     document_id: int
     conversation_id: int | None = None
+    session_id: int | None = None
 
 
 def _get_owned_conversation(conversation_id: int, db: Session, user_id: int) -> AssistantConversation:
@@ -207,8 +210,163 @@ def _get_owned_conversation(conversation_id: int, db: Session, user_id: int) -> 
     return conv
 
 
+def _get_owned_session(session_id: int, db: Session, user_id: int) -> ChatSession:
+    sess = db.query(ChatSession).filter_by(id=session_id, user_id=user_id).first()
+    if not sess:
+        raise HTTPException(404, "Chat session not found.")
+    return sess
+
+
+# ============================================================================
+# JWT-Protected, Owner-Scoped Chat Sessions Endpoints
+# ============================================================================
+
+@router.get("/sessions", response_model=list[ChatSessionOut])
+def list_sessions(db: Session = Depends(get_db), u = Depends(current_user)):
+    return (
+        db.query(ChatSession)
+        .filter_by(user_id=u.id)
+        .order_by(desc(ChatSession.updated_at))
+        .all()
+    )
+
+
+@router.post("/sessions", response_model=ChatSessionOut)
+def create_session(
+    payload: ChatSessionCreate | None = None,
+    db: Session = Depends(get_db),
+    u = Depends(current_user),
+):
+    title = (payload.title if payload and payload.title else "New chat").strip() or "New chat"
+    session = ChatSession(user_id=u.id, title=title)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@router.get("/sessions/{session_id}", response_model=ChatSessionDetailOut)
+def get_session_detail(session_id: int, db: Session = Depends(get_db), u = Depends(current_user)):
+    session = _get_owned_session(session_id, db, u.id)
+    messages = (
+        db.query(ChatMessage)
+        .filter_by(session_id=session.id)
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+        .all()
+    )
+    return {
+        "id": session.id,
+        "title": session.title,
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+        "messages": messages,
+    }
+
+
+@router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageOut])
+def list_session_messages(session_id: int, db: Session = Depends(get_db), u = Depends(current_user)):
+    session = _get_owned_session(session_id, db, u.id)
+    return (
+        db.query(ChatMessage)
+        .filter_by(session_id=session.id)
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+        .all()
+    )
+
+
+@router.patch("/sessions/{session_id}", response_model=ChatSessionOut)
+def rename_session(
+    session_id: int,
+    payload: ChatSessionRename,
+    db: Session = Depends(get_db),
+    u = Depends(current_user),
+):
+    session = _get_owned_session(session_id, db, u.id)
+    session.title = payload.title.strip()
+    session.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: int, db: Session = Depends(get_db), u = Depends(current_user)):
+    session = _get_owned_session(session_id, db, u.id)
+    db.query(ChatMessage).filter_by(session_id=session.id).delete()
+    db.delete(session)
+    db.commit()
+    return {"status": "ok", "deleted_id": session_id}
+
+
+@router.post("/sessions/{session_id}/messages", response_model=ChatMessageOut)
+def add_session_message(
+    session_id: int,
+    payload: ChatMessageCreate,
+    db: Session = Depends(get_db),
+    u = Depends(current_user),
+):
+    session = _get_owned_session(session_id, db, u.id)
+    msg = ChatMessage(
+        session_id=session.id,
+        role=payload.role,
+        content=payload.content,
+        language=payload.language,
+        document_id=payload.document_id,
+        attachment_name=payload.attachment_name,
+    )
+    db.add(msg)
+    session.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
+@router.get("/conversations/{conversation_id}/messages")
+def get_conversation_messages_compat(conversation_id: int, db: Session = Depends(get_db), u = Depends(current_user)):
+    # Support both session_id and conversation_id
+    sess = db.query(ChatSession).filter_by(id=conversation_id, user_id=u.id).first()
+    if sess:
+        msgs = (
+            db.query(ChatMessage)
+            .filter_by(session_id=sess.id)
+            .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+            .all()
+        )
+        return [
+            {
+                "id": m.id,
+                "role": m.role,
+                "text": m.content,
+                "content": m.content,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in msgs
+        ]
+    conv = _get_owned_conversation(conversation_id, db, u.id)
+    msgs = db.query(AssistantMessage).filter_by(conversation_id=conv.id).order_by(AssistantMessage.id).all()
+    return [
+        {
+            "id": m.id,
+            "role": m.role,
+            "text": m.content,
+            "content": m.content,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in msgs
+    ]
+
+
 @router.get("/conversations")
 def list_conversations(db: Session = Depends(get_db), u = Depends(current_user)):
+    sessions = (
+        db.query(ChatSession)
+        .filter_by(user_id=u.id)
+        .order_by(desc(ChatSession.updated_at))
+        .limit(50)
+        .all()
+    )
+    if sessions:
+        return [{"id": s.id, "title": s.title, "updated_at": s.updated_at.isoformat()} for s in sessions]
     items = (
         db.query(AssistantConversation)
         .filter_by(owner_id=u.id)
@@ -446,24 +604,65 @@ async def send_chat_message(
     2. Document summarization (map-reduce for long files).
     3. LLM completion with document context and tool calling.
     """
-    # 1. Ensure conversation exists
-    conv = (
-        _get_owned_conversation(payload.conversation_id, db, u.id)
-        if payload.conversation_id
-        else AssistantConversation(owner_id=u.id, title="New chat")
-    )
-    if not payload.conversation_id:
-        db.add(conv)
+    # 1. Ensure chat session exists
+    target_id = payload.session_id or payload.conversation_id
+    user_text = payload.text.strip()
+    auto_title = (user_text.split("\n")[0][:40].strip() if user_text else "New chat") or "New chat"
+
+    if target_id:
+        session = db.query(ChatSession).filter_by(id=target_id, user_id=u.id).first()
+        if not session:
+            conv = db.query(AssistantConversation).filter_by(id=target_id, owner_id=u.id).first()
+            if not conv:
+                session = ChatSession(user_id=u.id, title=auto_title)
+            else:
+                session = ChatSession(user_id=u.id, title=conv.title)
+            db.add(session)
+            db.flush()
+    else:
+        session = ChatSession(user_id=u.id, title=auto_title)
+        db.add(session)
         db.flush()
 
+    sess_id = session.id
+    sess_title = str(session.title or "Chat")
+
+    # Mirror to legacy AssistantConversation for backwards compatibility.
+    # NEVER force id=sess_id: the auto-increment IDs of the two tables are independent
+    # and an explicit-ID INSERT causes UNIQUE constraint failures when that ID was
+    # already issued to a different conversation.
+    conv = db.query(AssistantConversation).filter_by(owner_id=u.id, title=sess_title).first()
+    if not conv:
+        conv = AssistantConversation(owner_id=u.id, title=sess_title)
+        db.add(conv)
+        db.flush()
     conv_id = conv.id
-    conv_title = str(conv.title or "Chat")
+    conv_title = sess_title
 
-    # 2. Link attachments to this conversation
+    # Save user message BEFORE calling conversion or LLM
+    user_chat_msg = ChatMessage(session_id=sess_id, role="user", content=user_text or "Request", language=payload.language)
+    db.add(user_chat_msg)
+    db.add(AssistantMessage(conversation_id=conv_id, role="user", content=user_text or "Request"))
+    session.updated_at = datetime.utcnow()
+    conv.updated_at = datetime.utcnow()
+    db.commit()
+
+    # 2. Link attachments to this conversation & session
     for att_id in payload.attachment_ids:
-        link_attachment_to_conversation(att_id, conv_id, u.id)
+        link_attachment_to_conversation(att_id, sess_id, u.id)
+        if conv_id != sess_id:
+            link_attachment_to_conversation(att_id, conv_id, u.id)
 
-    attachments = get_conversation_attachments(conv_id, u.id)
+    attachments = get_conversation_attachments(sess_id, u.id)
+    if not attachments and conv_id != sess_id:
+        attachments = get_conversation_attachments(conv_id, u.id)
+    if not attachments and payload.attachment_ids:
+        attachments = []
+        for att_id in payload.attachment_ids:
+            try:
+                attachments.append(get_attachment(att_id, u.id))
+            except Exception:
+                pass
 
     # 3. Deterministic Fast Path:
     # If action is 'convert' or user text matches conversion intent
@@ -480,8 +679,9 @@ async def send_chat_message(
             note_text = "\n*Note: Layout is approximate - review the result.*" if approximate else ""
             reply_text = f"I've converted **{target_att['filename']}** to **{tgt_fmt.upper()}** for you!{note_text}\n\n[DOWNLOAD_CARD:{json.dumps(artifact)}]"
 
-            db.add(AssistantMessage(conversation_id=conv_id, role="user", content=payload.text or f"Convert to {tgt_fmt.upper()}"))
+            db.add(ChatMessage(session_id=sess_id, role="assistant", content=reply_text, language=payload.language))
             db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=reply_text))
+            session.updated_at = datetime.utcnow()
             conv.updated_at = datetime.utcnow()
             db.commit()
             record_activity(
@@ -495,7 +695,7 @@ async def send_chat_message(
             if payload.stream:
                 async def stream_artifact():
                     yield f"data: {json.dumps({'token': reply_text, 'delta': reply_text, 'artifacts': [artifact]})}\n\n"
-                    yield f"data: {json.dumps({'done': True, 'reply': reply_text, 'artifacts': [artifact], 'conversation_id': conv_id, 'title': conv_title})}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'reply': reply_text, 'artifacts': [artifact], 'session_id': sess_id, 'conversation_id': conv_id, 'title': conv_title})}\n\n"
 
                 return StreamingResponse(stream_artifact(), media_type="text/event-stream")
 
@@ -503,6 +703,7 @@ async def send_chat_message(
                 "text": reply_text,
                 "reply": reply_text,
                 "artifacts": [artifact],
+                "session_id": sess_id,
                 "conversation_id": conv_id,
                 "title": conv_title,
             }
@@ -610,15 +811,16 @@ async def send_chat_message(
             else:
                 summary_reply = "Please attach a document or ask a question first to summarize."
 
-        db.add(AssistantMessage(conversation_id=conv_id, role="user", content=payload.text or "Summarize document"))
+        db.add(ChatMessage(session_id=sess_id, role="assistant", content=summary_reply, language=payload.language))
         db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=summary_reply))
+        session.updated_at = datetime.utcnow()
         conv.updated_at = datetime.utcnow()
         db.commit()
 
         if payload.stream:
             async def stream_summary():
                 yield f"data: {json.dumps({'token': summary_reply, 'delta': summary_reply})}\n\n"
-                yield f"data: {json.dumps({'done': True, 'reply': summary_reply, 'artifacts': [], 'conversation_id': conv_id, 'title': conv_title})}\n\n"
+                yield f"data: {json.dumps({'done': True, 'reply': summary_reply, 'artifacts': [], 'session_id': sess_id, 'conversation_id': conv_id, 'title': conv_title})}\n\n"
 
             return StreamingResponse(stream_summary(), media_type="text/event-stream")
 
@@ -626,6 +828,7 @@ async def send_chat_message(
             "text": summary_reply,
             "reply": summary_reply,
             "artifacts": [],
+            "session_id": sess_id,
             "conversation_id": conv_id,
             "title": conv_title,
         }
@@ -634,11 +837,11 @@ async def send_chat_message(
     system_instruction = build_system_prompt(payload.language)
     msgs: list[dict[str, Any]] = [{"role": "system", "content": system_instruction}]
 
-    # Load history (trimmed to last 10 messages for context budget)
+    # Load history (trimmed to last 10 messages for context budget, excluding current user message)
     previous = (
-        db.query(AssistantMessage)
-        .filter_by(conversation_id=conv_id)
-        .order_by(desc(AssistantMessage.id))
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == sess_id, ChatMessage.id != user_chat_msg.id)
+        .order_by(desc(ChatMessage.created_at), desc(ChatMessage.id))
         .limit(10)
         .all()
     )
@@ -732,35 +935,46 @@ async def send_chat_message(
 
                 final_text = "".join(reply_accumulator)
                 with SessionLocal() as save_db:
+                    s = save_db.query(ChatSession).filter_by(id=sess_id).first()
                     c = save_db.query(AssistantConversation).filter_by(id=conv_id).first()
-                    persisted = False
+                    title_res = "Chat"
+                    if s:
+                        if s.title == "New chat":
+                            clean_t = user_text.split("\n")[0][:40].strip()
+                            s.title = clean_t or "Chat"
+                        s.updated_at = datetime.utcnow()
+                        save_db.add(ChatMessage(session_id=sess_id, role="assistant", content=final_text, language=payload.language))
+                        title_res = s.title
                     if c:
                         if c.title == "New chat":
-                            clean_t = user_text.strip().split("\n")[0][:45]
-                            c.title = clean_t + ("…" if len(user_text.strip().split("\n")[0]) > 45 else "")
+                            c.title = title_res
                         c.updated_at = datetime.utcnow()
-                        save_db.add(AssistantMessage(conversation_id=conv_id, role="user", content=user_text))
                         save_db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=final_text))
-                        save_db.commit()
-                        title_res = c.title
-                        persisted = True
-                    else:
-                        title_res = "Chat"
+                    save_db.commit()
 
-                if persisted:
-                    _record_conversion_artifacts(u.id, artifacts_collected)
-                    record_activity(u.id, "assistant.message", "assistant_conversation", conv_id, {
-                        "mode": "stream", "language": payload.language,
-                        "streamed": True, "attachment_count": len(attachments),
-                        "tool_count": len(artifacts_collected),
-                    })
-                yield f"data: {json.dumps({'done': True, 'reply': final_text, 'artifacts': artifacts_collected, 'conversation_id': conv_id, 'title': title_res})}\n\n"
+                _record_conversion_artifacts(u.id, artifacts_collected)
+                record_activity(u.id, "assistant.message", "chat_session", sess_id, {
+                    "mode": "stream", "language": payload.language,
+                    "streamed": True, "attachment_count": len(attachments),
+                    "tool_count": len(artifacts_collected),
+                })
+                yield f"data: {json.dumps({'done': True, 'reply': final_text, 'artifacts': artifacts_collected, 'session_id': sess_id, 'conversation_id': conv_id, 'title': title_res})}\n\n"
 
             except HTTPException as e:
                 yield f"data: {json.dumps({'error': e.detail, 'code': e.status_code})}\n\n"
             except Exception as e:
                 logger.exception("Error in send_chat_message stream")
-                yield f"data: {json.dumps({'error': f'Assistant error: {str(e)}', 'code': 500})}\n\n"
+                err_text = f"Assistant error: {str(e)}"
+                with SessionLocal() as err_db:
+                    partial_text = "".join(reply_accumulator).strip()
+                    if partial_text:
+                        err_db.add(ChatMessage(session_id=sess_id, role="assistant", content=partial_text, language=payload.language))
+                        err_db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=partial_text))
+                    s = err_db.query(ChatSession).filter_by(id=sess_id).first()
+                    if s:
+                        s.updated_at = datetime.utcnow()
+                    err_db.commit()
+                yield f"data: {json.dumps({'error': err_text, 'code': 500, 'session_id': sess_id, 'conversation_id': sess_id})}\n\n"
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
@@ -793,11 +1007,13 @@ async def send_chat_message(
         else:
             final_text = message.get("content") or ""
 
-        db.add(AssistantMessage(conversation_id=conv_id, role="user", content=user_text))
+        db.add(ChatMessage(session_id=sess_id, role="assistant", content=final_text, language=payload.language))
         db.add(AssistantMessage(conversation_id=conv_id, role="assistant", content=final_text))
+        session.updated_at = datetime.utcnow()
+        conv.updated_at = datetime.utcnow()
         db.commit()
         _record_conversion_artifacts(u.id, artifacts)
-        record_activity(u.id, "assistant.message", "assistant_conversation", conv_id, {
+        record_activity(u.id, "assistant.message", "chat_session", sess_id, {
             "mode": "chat", "language": payload.language,
             "attachment_count": len(attachments), "tool_count": len(artifacts),
         })
@@ -806,6 +1022,7 @@ async def send_chat_message(
             "text": final_text,
             "reply": final_text,
             "artifacts": artifacts,
+            "session_id": sess_id,
             "conversation_id": conv_id,
-            "title": conv.title,
+            "title": session.title,
         }

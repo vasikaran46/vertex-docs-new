@@ -44,6 +44,25 @@ class AssistantMessage(Base):
     content:Mapped[str]=mapped_column(Text)
     created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="New chat")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(20)) # "user" | "assistant"
+    content: Mapped[str] = mapped_column(Text)
+    language: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    document_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
 class ActivityLog(Base):
     __tablename__="activity_logs"
     id:Mapped[int]=mapped_column(Integer,primary_key=True)

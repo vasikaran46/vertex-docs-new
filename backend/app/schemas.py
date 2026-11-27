@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel,EmailStr,Field
 class SignupIn(BaseModel):
@@ -77,3 +78,45 @@ class EditorExportIn(BaseModel):
     page_preview_data:str|None=Field(default=None,max_length=6000000)
     output_format:Literal["pdf","docx","txt"]="pdf"
     page_size:Literal["A4","Letter"]="A4"
+
+class ChatSessionCreate(BaseModel):
+    title: str | None = Field(default="New chat", max_length=200)
+
+class ChatSessionRename(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+class ChatMessageCreate(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+    language: str | None = None
+    document_id: int | None = None
+    attachment_name: str | None = None
+
+class ChatMessageOut(BaseModel):
+    id: int
+    session_id: int
+    role: str
+    content: str
+    language: str | None = None
+    document_id: int | None = None
+    attachment_name: str | None = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class ChatSessionOut(BaseModel):
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class ChatSessionDetailOut(BaseModel):
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    messages: list[ChatMessageOut]
+    class Config:
+        from_attributes = True
